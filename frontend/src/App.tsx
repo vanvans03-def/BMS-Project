@@ -93,6 +93,12 @@ interface DiscoveredDevice {
   networkNumber?: number
 }
 
+// [NEW] Interface สำหรับ Settings
+interface SystemSettings {
+  polling_interval?: number
+  [key: string]: any
+}
+
 function App() {
   const [collapsed, setCollapsed] = useState(false)
   const [searchText, setSearchText] = useState("")
@@ -131,9 +137,29 @@ function App() {
     })
   }, [])
 
+  // ---------------------------------------------------------------------------
+  // [MODIFIED] 1. ดึงค่า Settings และเพิ่ม refetchSettings
+  // ---------------------------------------------------------------------------
+  const { data: settings, refetch: refetchSettings } = useQuery<SystemSettings>({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/settings`)
+      return await res.json()
+    },
+    // [FIXED] ตั้ง staleTime เป็น 0 เพื่อให้ข้อมูลถือว่าเก่าทันทีและพร้อมดึงใหม่
+    staleTime: 0, 
+  })
+
+  // [NEW] เพิ่ม Effect: เมื่อเปลี่ยนหน้าจอ (เช่น กลับจากหน้า Settings) ให้ดึงค่า Settings ใหม่ทันที
   useEffect(() => {
+    refetchSettings()
     AOS.refresh()
-  }, [currentView, selectedDevice])
+  }, [currentView, selectedDevice, refetchSettings])
+
+  // [NEW] 2. คำนวณค่า Interval (ถ้าไม่มีให้ใช้ Default 5000ms, ต่ำสุด 1000ms)
+  const pollingInterval = Math.max(Number(settings?.polling_interval) || 5000, 1000)
+
+  // ---------------------------------------------------------------------------
 
   const {
     data: devices,
@@ -147,7 +173,7 @@ function App() {
       return (Array.isArray(data) ? data : []) as Device[]
     },
     enabled: currentView === "dashboard",
-    refetchInterval: 5000,
+    refetchInterval: 10000, // Device List อัปเดตช้าหน่อยได้
   })
 
   const {
@@ -168,6 +194,9 @@ function App() {
     enabled: currentView === "detail" && !!selectedDevice,
   })
 
+  // ---------------------------------------------------------------------------
+  // [MODIFIED] 3. แก้ไข useEffect สำหรับ Monitor ให้ใช้ dynamic pollingInterval
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (currentView !== "detail" || !selectedDevice || !points || points.length === 0) {
       setIsMonitoring(false)
@@ -200,14 +229,20 @@ function App() {
       }
     }
 
+    // เรียกครั้งแรกทันที
     fetchValues()
-    const interval = setInterval(fetchValues, 5000)
+    
+    // ตั้ง Timer ตามค่า pollingInterval ที่ดึงมาจาก Database
+    console.log(`⏱️ Monitor Interval: ${pollingInterval} ms`)
+    const interval = setInterval(fetchValues, pollingInterval)
 
     return () => {
       clearInterval(interval)
       setIsMonitoring(false)
     }
-  }, [currentView, selectedDevice, points])
+  }, [currentView, selectedDevice, points, pollingInterval]) // เพิ่ม pollingInterval ใน dependency
+
+  // ---------------------------------------------------------------------------
 
   const existingDeviceIds = useMemo(() => {
     return new Set(devices?.map((d) => d.device_instance_id) || [])
@@ -411,7 +446,12 @@ function App() {
                   </Text>
                   <Text type="secondary">ID: {selectedDevice?.device_instance_id}</Text>
                   <Badge status="success" text="Online" />
-                  {isMonitoring && <Badge status="processing" text="Monitoring" />}
+                  {isMonitoring && (
+                    <Badge 
+                      status="processing" 
+                      text={`Monitoring (${(pollingInterval/1000).toFixed(1)}s)`} 
+                    />
+                  )}
                 </Space>
               </Space>
             </Col>
