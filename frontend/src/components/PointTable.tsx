@@ -246,7 +246,12 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint }: Point
       dataSource={points}
       loading={loading}
       rowKey="id"
-      pagination={{ pageSize: 10, showSizeChanger: true }}
+      pagination={{ 
+        defaultPageSize: 10,
+        pageSizeOptions: ['10', '20', '50', '100'],
+        showSizeChanger: true,
+        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} points`
+      }}
       scroll={{ x: 1000 }}
       rowClassName={() => "fade-in-row"}
     />

@@ -4,6 +4,9 @@ import { devicesRoutes } from './routes/devices'
 import { pointsRoutes } from './routes/points'
 import { monitorRoutes } from './routes/monitor'
 import { settingsRoutes } from './routes/setting'
+import { usersRoutes } from './routes/users'
+import { databaseRoutes } from './routes/database'
+
 
 const app = new Elysia()
   .use(cors())
@@ -11,6 +14,8 @@ const app = new Elysia()
   .use(pointsRoutes)
   .use(monitorRoutes)
   .use(settingsRoutes)
+  .use(usersRoutes)
+  .use(databaseRoutes)
   .listen(3000)
 
 console.log(`🦊 Backend is running at ${app.server?.hostname}:${app.server?.port}`)
