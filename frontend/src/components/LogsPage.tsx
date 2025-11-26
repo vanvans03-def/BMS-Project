@@ -45,6 +45,10 @@ export const LogsPage = () => {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<AuditLog[]>([])
   
+  // ✅ เพิ่ม State สำหรับ Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  
   // Filter States
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([dayjs(), dayjs()])
   const [userFilter, setUserFilter] = useState('all')
@@ -60,7 +64,6 @@ export const LogsPage = () => {
     try {
       const params = new URLSearchParams()
       
-      // [FIXED] ใช้ ? เพื่อป้องกัน error ถ้า dateRange[0] หรือ [1] เป็น undefined
       if (dateRange && dateRange[0] && dateRange[1]) {
         params.append('startDate', dateRange[0].format('YYYY-MM-DD'))
         params.append('endDate', dateRange[1].format('YYYY-MM-DD'))
@@ -74,6 +77,9 @@ export const LogsPage = () => {
       
       const data = await res.json()
       setLogs(data)
+      
+      // ✅ รีเซ็ตกลับไปหน้าแรกเมื่อมีการค้นหาใหม่
+      setCurrentPage(1)
     } catch (error) {
       console.error(error)
       message.error('Failed to load audit logs')
@@ -96,7 +102,6 @@ export const LogsPage = () => {
             )
         }
     }
-    // [FIXED] ใส่ || '' เพื่อกัน name เป็น null/undefined
     return <Text>{(name || '').replace('OBJECT_', '').replace(/_/g, ' ')}</Text>
   }
 
@@ -162,14 +167,13 @@ export const LogsPage = () => {
             const parts = text.split('->')
             const oldVal = parts[0].trim()
             
-            // [FIXED] เช็ค parts[1] ก่อน split เพื่อกัน error
             const newValPart = parts[1] ? parts[1].trim() : ''
             const newVal = newValPart.split('(')[0].trim()
             const extra = newValPart.includes('(') ? `(${newValPart.split('(')[1]}` : ''
 
             return (
                 <Space wrap>
-                    <Tag bordered={false}>{oldVal}</Tag>
+                    <Tag>{oldVal}</Tag>
                     <ArrowRightOutlined style={{ fontSize: 12, color: '#999' }} />
                     <Tag color="processing">{newVal}</Tag>
                     {extra && <Text type="secondary" style={{fontSize: 11}}>{extra}</Text>}
@@ -191,7 +195,7 @@ export const LogsPage = () => {
         </div>
 
         <div data-aos="fade-up" data-aos-delay="100">
-            <Card style={{ marginBottom: 24 }} bordered={false}>
+            <Card style={{ marginBottom: 24 }}>
                 <Row gutter={[16, 16]} align="bottom">
                     <Col xs={24} md={8} lg={6}>
                         <Text strong>Date Range</Text>
@@ -249,13 +253,28 @@ export const LogsPage = () => {
         </div>
 
         <div data-aos="fade-up" data-aos-delay="200">
-            <Card title="Log Records (Latest First)" bordered={false} bodyStyle={{padding: '0 24px 24px'}}>
+            <Card title="Log Records (Latest First)" styles={{ body: {padding: '0 24px 24px'} }}>
                 <Table 
                     columns={columns} 
                     dataSource={logs} 
                     rowKey="id"
                     loading={loading}
-                    pagination={{ pageSize: 10, showSizeChanger: true }}
+                    pagination={{ 
+                        current: currentPage,
+                        pageSize: pageSize,
+                        total: logs.length,
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} logs`,
+                        onChange: (page, newPageSize) => {
+                            setCurrentPage(page)
+                            if (newPageSize !== pageSize) {
+                                setPageSize(newPageSize)
+                                setCurrentPage(1) // รีเซ็ตกลับหน้าแรกเมื่อเปลี่ยนขนาดหน้า
+                            }
+                        }
+                    }}
                     scroll={{ x: 800 }}
                     size="middle" 
                 />

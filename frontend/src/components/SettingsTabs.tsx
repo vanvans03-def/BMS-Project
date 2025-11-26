@@ -5,13 +5,13 @@ import { useState, useEffect } from 'react'
 import {
     Form, Input, InputNumber, Button, Card,
     Alert, Table, Space, Popconfirm, Statistic,
-    Row, Col, message, Typography, Divider, Modal, Select, Tag
+    Row, Col, message, Typography, Divider, Modal, Select
 } from 'antd'
 import {
     SaveOutlined, ApiOutlined, DatabaseOutlined,
     PlusOutlined, GlobalOutlined, DeleteOutlined,
-    UserOutlined, ReloadOutlined, ExclamationCircleOutlined,
-    MailOutlined, EditOutlined // Add EditOutlined
+    UserOutlined,
+    MailOutlined, EditOutlined
 } from '@ant-design/icons'
 import { config } from '../config'
 import AOS from 'aos'
