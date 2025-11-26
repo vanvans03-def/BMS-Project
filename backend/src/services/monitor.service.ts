@@ -1,7 +1,7 @@
 import { sql } from '../db'
 import { bacnetService } from './bacnet.service'
 import type { ReadRequestDto } from '../dtos/bacnet.dto'
-import type { MonitorResponse } from '../dtos/monitor.dto' // เพิ่ม WritePointResponse
+import type { MonitorResponse } from '../dtos/monitor.dto'
 
 export const monitorService = {
   /**
@@ -40,7 +40,7 @@ export const monitorService = {
         propertyId: 'PROP_PRESENT_VALUE'
       }))
 
-      console.log(`📊 [Monitor] Reading ${readRequests.length} points from device ${device.device_instance_id}`)
+      // console.log(`📊 [Monitor] Reading ${readRequests.length} points from device ${device.device_instance_id}`)
       
       const results = await bacnetService.readMultiple(readRequests)
 
@@ -74,6 +74,5 @@ export const monitorService = {
         values: []
       }
     }
-  },
-
+  }
 }

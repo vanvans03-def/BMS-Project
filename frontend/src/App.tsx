@@ -27,7 +27,7 @@ import {
 import {
   AppstoreOutlined,
   SettingOutlined,
-  FileTextOutlined,
+  FileTextOutlined, // Icon สำหรับ Logs
   SearchOutlined,
   UserOutlined,
   ReloadOutlined,
@@ -52,6 +52,8 @@ import { DiscoveryModal } from "./components/DiscoveryModal"
 import { DeviceStatsCards, PointStatsCards } from "./components/StatsCards"
 // Import Settings Components
 import { GeneralSettings, NetworkSettings, UserSettings, DatabaseSettings } from "./components/SettingsTabs"
+// [NEW] Import LogsPage
+import { LogsPage } from "./components/LogsPage"
 
 import AOS from "aos"
 import "aos/dist/aos.css"
@@ -93,7 +95,6 @@ interface DiscoveredDevice {
   networkNumber?: number
 }
 
-// [NEW] Interface สำหรับ Settings
 interface SystemSettings {
   polling_interval?: number
   [key: string]: any
@@ -107,7 +108,8 @@ function App() {
     token: { colorBgContainer, borderRadiusLG },
   } = theme.useToken()
 
-  const [currentView, setCurrentView] = useState<"dashboard" | "detail" | "settings">("dashboard")
+  // [MODIFIED] เพิ่ม state 'logs' ใน currentView
+  const [currentView, setCurrentView] = useState<"dashboard" | "detail" | "settings" | "logs">("dashboard")
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
 
   const [isDiscoveryModalOpen, setIsDiscoveryModalOpen] = useState(false)
@@ -137,29 +139,21 @@ function App() {
     })
   }, [])
 
-  // ---------------------------------------------------------------------------
-  // [MODIFIED] 1. ดึงค่า Settings และเพิ่ม refetchSettings
-  // ---------------------------------------------------------------------------
   const { data: settings, refetch: refetchSettings } = useQuery<SystemSettings>({
     queryKey: ["settings"],
     queryFn: async () => {
       const res = await fetch(`${config.apiUrl}/settings`)
       return await res.json()
     },
-    // [FIXED] ตั้ง staleTime เป็น 0 เพื่อให้ข้อมูลถือว่าเก่าทันทีและพร้อมดึงใหม่
     staleTime: 0, 
   })
 
-  // [NEW] เพิ่ม Effect: เมื่อเปลี่ยนหน้าจอ (เช่น กลับจากหน้า Settings) ให้ดึงค่า Settings ใหม่ทันที
   useEffect(() => {
     refetchSettings()
     AOS.refresh()
   }, [currentView, selectedDevice, refetchSettings])
 
-  // [NEW] 2. คำนวณค่า Interval (ถ้าไม่มีให้ใช้ Default 5000ms, ต่ำสุด 1000ms)
   const pollingInterval = Math.max(Number(settings?.polling_interval) || 5000, 1000)
-
-  // ---------------------------------------------------------------------------
 
   const {
     data: devices,
@@ -173,7 +167,7 @@ function App() {
       return (Array.isArray(data) ? data : []) as Device[]
     },
     enabled: currentView === "dashboard",
-    refetchInterval: 10000, // Device List อัปเดตช้าหน่อยได้
+    refetchInterval: 10000,
   })
 
   const {
@@ -194,9 +188,6 @@ function App() {
     enabled: currentView === "detail" && !!selectedDevice,
   })
 
-  // ---------------------------------------------------------------------------
-  // [MODIFIED] 3. แก้ไข useEffect สำหรับ Monitor ให้ใช้ dynamic pollingInterval
-  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (currentView !== "detail" || !selectedDevice || !points || points.length === 0) {
       setIsMonitoring(false)
@@ -229,31 +220,30 @@ function App() {
       }
     }
 
-    // เรียกครั้งแรกทันที
     fetchValues()
     
-    // ตั้ง Timer ตามค่า pollingInterval ที่ดึงมาจาก Database
-    console.log(`⏱️ Monitor Interval: ${pollingInterval} ms`)
     const interval = setInterval(fetchValues, pollingInterval)
 
     return () => {
       clearInterval(interval)
       setIsMonitoring(false)
     }
-  }, [currentView, selectedDevice, points, pollingInterval]) // เพิ่ม pollingInterval ใน dependency
-
-  // ---------------------------------------------------------------------------
+  }, [currentView, selectedDevice, points, pollingInterval]) 
 
   const existingDeviceIds = useMemo(() => {
     return new Set(devices?.map((d) => d.device_instance_id) || [])
   }, [devices])
 
+  // [MODIFIED] เพิ่ม case สำหรับหน้า logs
   const handleMenuClick = (key: string) => {
     if (key === "1") {
       setCurrentView("dashboard")
       setSelectedDevice(null)
     } else if (key === "2") {
       setCurrentView("settings")
+      setSelectedDevice(null)
+    } else if (key === "3") { // [NEW] Key 3 สำหรับ Logs
+      setCurrentView("logs")
       setSelectedDevice(null)
     }
   }
@@ -588,14 +578,18 @@ function App() {
           breakpoint="lg"
           collapsedWidth={window.innerWidth < 768 ? 0 : 80}
         >
+          {/* [MODIFIED] เพิ่มเมนู Logs และจัด active state ให้ถูกต้อง */}
           <Menu
             mode="inline"
-            selectedKeys={[currentView === "settings" ? "2" : "1"]}
+            selectedKeys={[
+                currentView === "settings" ? "2" : 
+                currentView === "logs" ? "3" : "1"
+            ]}
             onClick={({ key }) => handleMenuClick(key)}
             items={[
               { key: "1", icon: <AppstoreOutlined />, label: "Dashboard" },
               { key: "2", icon: <SettingOutlined />, label: "Settings" },
-              { key: "3", icon: <FileTextOutlined />, label: "Logs" },
+              { key: "3", icon: <FileTextOutlined />, label: "Logs" }, // เปลี่ยน Icon
             ]}
           />
         </Sider>
@@ -613,6 +607,9 @@ function App() {
             {currentView === "dashboard" && renderDashboard()}
             {currentView === "detail" && renderDetail()}
             {currentView === "settings" && renderSettings()}
+            
+            {/* [NEW] เรนเดอร์หน้า LogsPage */}
+            {currentView === "logs" && <LogsPage />}
 
             <DiscoveryModal
               open={isDiscoveryModalOpen}

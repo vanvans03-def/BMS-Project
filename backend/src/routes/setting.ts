@@ -1,22 +1,32 @@
 import { Elysia, t } from 'elysia'
 import { settingsService } from '../services/settings.service'
+import { auditLogService } from '../services/audit-log.service' // [NEW] Import
 
 export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
-  // 1. GET /settings - ดึงค่าทั้งหมดไปโชว์ใน Form
   .get('/', async () => {
     return await settingsService.getSettings()
   })
 
-  // 2. PUT /settings - บันทึกค่าจาก Form
+  // [MODIFIED] บันทึก Log เมื่อมีการแก้ไข Settings
   .put('/', async ({ body }) => {
-    // รับ Body เป็น Object อะไรก็ได้ (Flexible)
-    const settings = body as Record<string, any>
+    const newSettings = body as Record<string, any>
     
-    await settingsService.updateSettings(settings)
+    // 1. (Optional) ดึงค่าเก่ามาเทียบเพื่อ Log ว่าเปลี่ยนจากอะไรเป็นอะไร
+    // แต่เพื่อความง่าย เราจะ Log แค่ว่ามีการอัปเดต Key ไหนบ้าง
+    const keysChanged = Object.keys(newSettings).join(', ')
+
+    await settingsService.updateSettings(newSettings)
+    
+    // [NEW] ✅ บันทึก Audit Log
+    await auditLogService.recordLog({
+        user_name: 'Admin', // Mock User
+        action_type: 'SETTING',
+        target_name: 'System Configuration',
+        details: `Updated settings: ${keysChanged}`
+    })
     
     return { success: true, message: 'Settings saved successfully' }
   }, {
-    // Validation แบบหลวมๆ เพื่อให้รับค่าได้หลากหลาย
     body: t.Record(t.String(), t.Any())
   })

@@ -6,6 +6,7 @@ import { monitorRoutes } from './routes/monitor'
 import { settingsRoutes } from './routes/setting'
 import { usersRoutes } from './routes/users'
 import { databaseRoutes } from './routes/database'
+import { auditLogRoutes } from './routes/audit-logs'
 
 
 const app = new Elysia()
@@ -16,6 +17,7 @@ const app = new Elysia()
   .use(settingsRoutes)
   .use(usersRoutes)
   .use(databaseRoutes)
+  .use(auditLogRoutes)
   .listen(3000)
 
 console.log(`🦊 Backend is running at ${app.server?.hostname}:${app.server?.port}`)
