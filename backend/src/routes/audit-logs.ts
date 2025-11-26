@@ -3,7 +3,20 @@ import { auditLogService } from '../services/audit-log.service'
 
 export const auditLogRoutes = new Elysia({ prefix: '/audit-logs' })
   
-  // GET /audit-logs - ดึงข้อมูล Logs ล่าสุด
-  .get('/', async () => {
-    return await auditLogService.getLogs(100) // ดึง 100 รายการล่าสุด
+  .get('/', async ({ query }) => {
+    return await auditLogService.getLogs({
+        search: query.search,
+        actionType: query.actionType,
+        startDate: query.startDate,
+        endDate: query.endDate,
+        user: query.user
+    })
+  }, {
+    query: t.Object({
+        search: t.Optional(t.String()),
+        actionType: t.Optional(t.String()),
+        startDate: t.Optional(t.String()),
+        endDate: t.Optional(t.String()),
+        user: t.Optional(t.String())
+    })
   })
