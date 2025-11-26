@@ -1,71 +1,83 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-// frontend/src/components/LoginPage.tsx
 import { useState } from 'react'
-import { Form, Input, Button, Card, Typography, Layout } from 'antd'
+import { Form, Input, Button, Card, Typography, Layout, theme } from 'antd'
 import { UserOutlined, LockOutlined, DatabaseOutlined } from '@ant-design/icons'
 import { useAuth } from '../contexts/AuthContext'
 
 const { Title, Text } = Typography
-const { Content } = Layout
+const { Content, Footer } = Layout
 
 export const LoginPage = () => {
   const { login } = useAuth()
   const [loading, setLoading] = useState(false)
+  const {
+    token: { colorBgContainer, borderRadiusLG },
+  } = theme.useToken()
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true)
-    const success = await login(values.username, values.password)
+    await login(values.username, values.password)
     setLoading(false)
-    
-    // ถ้า Login สำเร็จ AuthContext จะจัดการ redirect ให้
-    // (ไม่ต้องทำอะไรเพิ่ม)
   }
 
   return (
-    <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-      <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      {/* 1. Header (Optional: ให้เหมือน Navbar ด้านใน แต่โล่งๆ) */}
+      <div 
+        style={{
+            height: 64,
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 50px',
+            background: '#001529', // สีเดียวกับ Header ด้านใน
+        }}
+      >
+         <div style={{ display: 'flex', alignItems: 'center', color: 'white' }}>
+            <DatabaseOutlined style={{ fontSize: 24, marginRight: 10, color: '#1890ff' }} />
+            <span style={{ fontSize: 18, fontWeight: 600 }}>BMS Project</span>
+         </div>
+      </div>
+
+      <Content 
+        style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            flexDirection: 'column',
+            padding: '50px 0'
+        }}
+      >
+        {/* Logo & Title Area */}
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+            <DatabaseOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+            <Title level={2} style={{ margin: '16px 0 8px' }}>Sign in to BMS</Title>
+            <Text type="secondary">Building Management System Dashboard</Text>
+        </div>
+
+        {/* Login Card */}
         <Card 
           style={{ 
             width: 400, 
-            boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-            borderRadius: 12
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)', // เงาบางๆ แบบ Professional
+            borderRadius: borderRadiusLG,
+            background: colorBgContainer
           }}
           bordered={false}
         >
-          {/* Logo & Title */}
-          <div style={{ textAlign: 'center', marginBottom: 32 }} data-aos="zoom-in">
-            <DatabaseOutlined 
-              style={{ 
-                fontSize: 64, 
-                color: '#1890ff', 
-                marginBottom: 16,
-                animation: 'pulse 2s infinite'
-              }} 
-            />
-            <Title level={2} style={{ margin: 0, color: '#1890ff' }}>
-              BMS Login
-            </Title>
-            <Text type="secondary" style={{ fontSize: 16 }}>
-              Building Management System
-            </Text>
-          </div>
-
-          {/* Login Form */}
           <Form
             name="login"
             onFinish={onFinish}
             size="large"
             layout="vertical"
             autoComplete="off"
+            initialValues={{ remember: true }}
           >
             <Form.Item
               name="username"
               rules={[{ required: true, message: 'Please enter your username' }]}
             >
               <Input 
-                prefix={<UserOutlined style={{ color: '#1890ff' }} />} 
+                prefix={<UserOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} 
                 placeholder="Username" 
-                disabled={loading}
               />
             </Form.Item>
 
@@ -74,42 +86,35 @@ export const LoginPage = () => {
               rules={[{ required: true, message: 'Please enter your password' }]}
             >
               <Input.Password 
-                prefix={<LockOutlined style={{ color: '#1890ff' }} />} 
+                prefix={<LockOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} 
                 placeholder="Password" 
-                disabled={loading}
               />
             </Form.Item>
 
-            <Form.Item style={{ marginBottom: 8 }}>
+            <Form.Item style={{ marginBottom: 12 }}>
               <Button 
                 type="primary" 
                 htmlType="submit" 
                 loading={loading} 
                 block
-                style={{ height: 48, fontSize: 16, fontWeight: 500 }}
+                style={{ fontWeight: 500 }}
               >
-                {loading ? 'Logging in...' : 'Log in'}
+                Sign in
               </Button>
             </Form.Item>
+            
+            <div style={{ textAlign: 'center' }}>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                   Default: admin / password
+                </Text>
+            </div>
           </Form>
-
-          {/* Footer Info */}
-          <div style={{ textAlign: 'center', marginTop: 24 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              Demo: admin / password
-            </Text>
-          </div>
         </Card>
       </Content>
 
-      <style>
-        {`
-          @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-          }
-        `}
-      </style>
+      <Footer style={{ textAlign: 'center', background: 'transparent' }}>
+        BMS Project ©{new Date().getFullYear()} Created by YourTeam
+      </Footer>
     </Layout>
   )
 }

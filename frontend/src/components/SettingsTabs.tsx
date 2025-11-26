@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import {
     Form, Input, InputNumber, Button, Card,
     Alert, Table, Space, Popconfirm, Statistic,
-    Row, Col, message, Typography, Divider, Modal, Select
+    Row, Col, message, Typography, Divider, Modal, Select, Spin
 } from 'antd'
 import {
     SaveOutlined, ApiOutlined, DatabaseOutlined,
@@ -524,6 +524,7 @@ export const DatabaseSettings = () => {
     const [messageApi, contextHolder] = message.useMessage()
 
     useEffect(() => { 
+        // Refresh AOS เมื่อโหลดหน้าเสร็จ เพื่อให้อนิเมชั่นทำงาน
         AOS.refresh()
         loadStats()
     }, [])
@@ -589,82 +590,101 @@ export const DatabaseSettings = () => {
     return (
         <Card>
             {contextHolder}
-            <Title level={5}>System Statistics</Title>
+            <div data-aos="fade-down">
+                <Title level={5}>System Statistics</Title>
+            </div>
+            
             <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
                 <Col xs={24} sm={12} md={6}>
-                    <Card size="small">
-                        <Statistic 
-                            title="Total Devices" 
-                            value={stats.totalDevices || 0} 
-                            prefix={<ApiOutlined />} 
-                        />
-                    </Card>
+                    {/* ใช้ AOS fade-up และ delay เพื่อให้เด้งขึ้นมาทีละอัน */}
+                    <div data-aos="fade-up" data-aos-delay="100">
+                        <Card size="small">
+                            <Statistic 
+                                title="Total Devices" 
+                                value={stats.totalDevices || 0} 
+                                prefix={<ApiOutlined />} 
+                            />
+                        </Card>
+                    </div>
                 </Col>
                 <Col xs={24} sm={12} md={6}>
-                    <Card size="small">
-                        <Statistic 
-                            title="Total Points" 
-                            value={stats.totalPoints || 0} 
-                            prefix={<DatabaseOutlined />} 
-                        />
-                    </Card>
+                    <div data-aos="fade-up" data-aos-delay="200">
+                        <Card size="small">
+                            <Statistic 
+                                title="Total Points" 
+                                value={stats.totalPoints || 0} 
+                                prefix={<DatabaseOutlined />} 
+                            />
+                        </Card>
+                    </div>
                 </Col>
                 <Col xs={24} sm={12} md={6}>
-                    <Card size="small">
-                        <Statistic 
-                            title="Active Devices" 
-                            value={stats.activeDevices || 0} 
-                            valueStyle={{ color: '#52c41a' }}
-                        />
-                    </Card>
+                    <div data-aos="fade-up" data-aos-delay="300">
+                        <Card size="small">
+                            <Statistic 
+                                title="Active Devices" 
+                                value={stats.activeDevices || 0} 
+                                valueStyle={{ color: '#52c41a' }}
+                            />
+                        </Card>
+                    </div>
                 </Col>
                 <Col xs={24} sm={12} md={6}>
-                    <Card size="small">
-                        <Statistic 
-                            title="Database Size" 
-                            value={stats.databaseSize || 'N/A'} 
-                        />
-                    </Card>
+                    <div data-aos="fade-up" data-aos-delay="400">
+                        <Card size="small">
+                            <Statistic 
+                                title="Database Size" 
+                                // ถ้า loading ให้ใส่ค่าว่างไว้ก่อน แล้วให้ formatter จัดการแสดง Spin
+                                value={loading ? " " : (stats.databaseSize || 'N/A')}
+                                formatter={(value) => loading ? <Spin size="small" /> : value}
+                            />
+                        </Card>
+                    </div>
                 </Col>
             </Row>
 
             <Divider />
 
-            <Title level={5}>Maintenance</Title>
-            <Space direction="vertical" style={{ width: '100%' }} size="large">
-                <Card size="small">
-                    <Space direction="vertical" style={{ width: '100%' }}>
-                        <Text strong>Optimize Database</Text>
-                        <Button 
-                            icon={<ApiOutlined />} 
-                            onClick={handleOptimize}
-                            loading={loading}
-                        >
-                            Optimize Now
-                        </Button>
-                    </Space>
-                </Card>
-            </Space>
+            <div data-aos="fade-up" data-aos-delay="500">
+                <Title level={5}>Maintenance</Title>
+                <Space direction="vertical" style={{ width: '100%' }} size="large">
+                    <Card size="small">
+                        <Space direction="vertical" style={{ width: '100%' }}>
+                            <Text strong>Optimize Database</Text>
+                            <Button 
+                                icon={<ApiOutlined />} 
+                                onClick={handleOptimize}
+                                loading={loading}
+                            >
+                                Optimize Now
+                            </Button>
+                        </Space>
+                    </Card>
+                </Space>
+            </div>
 
             <Divider />
 
-            <Title level={5} type="danger">Danger Zone</Title>
-            <Alert 
-                message="Factory Reset" 
-                description="Delete all devices and points permanently" 
-                type="error" 
-                showIcon 
-                action={
-                    <Button 
-                        danger 
-                        type="primary" 
-                        icon={<DeleteOutlined />}
-                        onClick={() => setIsModalOpen(true)}
-                    >
-                        Clear All
-                    </Button>
-                } 
-            />
+            <div data-aos="fade-up" data-aos-delay="4000">
+                <Title level={5} type="danger">Danger Zone</Title>
+                <Alert 
+                    message="Factory Reset" 
+                    description="Delete all devices and points permanently" 
+                    type="error" 
+                    showIcon 
+                    action={
+                        <Button 
+                            danger 
+                            type="primary" 
+                            icon={<DeleteOutlined />}
+                            onClick={() => setIsModalOpen(true)}
+                            disabled={loading}
+                        >
+                            Clear All
+                        </Button>
+                    } 
+                />
+            </div>
 
             <Modal
                 title="⚠️ Factory Reset"
