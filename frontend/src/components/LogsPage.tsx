@@ -1,33 +1,20 @@
+// frontend/src/components/LogsPage.tsx
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 import { useState, useEffect } from 'react'
 import { 
-  Card, 
-  DatePicker, 
-  Select, 
-  Button, 
-  Table, 
-  Tag, 
-  Space, 
-  Row, 
-  Col, 
-  Typography,
-  message 
+  Card, DatePicker, Select, Button, Table, Tag, Space, 
+  Row, Col, Typography, message 
 } from 'antd'
 import { 
-  SearchOutlined, 
-  DownloadOutlined, 
-  FileTextOutlined,
-  UserOutlined,
-  SettingOutlined,
-  EditOutlined,
-  ArrowRightOutlined,
+  SearchOutlined, DownloadOutlined, FileTextOutlined,
+  UserOutlined, SettingOutlined, EditOutlined, ArrowRightOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import AOS from 'aos'
 import dayjs from 'dayjs'
-import { config } from '../config'
+import { authFetch } from '../utils/authFetch'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -44,12 +31,9 @@ interface AuditLog {
 export const LogsPage = () => {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<AuditLog[]>([])
-  
-  // ✅ เพิ่ม State สำหรับ Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   
-  // Filter States
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([dayjs(), dayjs()])
   const [userFilter, setUserFilter] = useState('all')
   const [actionFilter, setActionFilter] = useState('all')
@@ -72,13 +56,11 @@ export const LogsPage = () => {
       if (userFilter !== 'all') params.append('user', userFilter)
       if (actionFilter !== 'all') params.append('actionType', actionFilter)
 
-      const res = await fetch(`${config.apiUrl}/audit-logs?${params.toString()}`)
+      const res = await authFetch(`/audit-logs?${params.toString()}`)
       if (!res.ok) throw new Error('Failed to fetch logs')
       
       const data = await res.json()
       setLogs(data)
-      
-      // ✅ รีเซ็ตกลับไปหน้าแรกเมื่อมีการค้นหาใหม่
       setCurrentPage(1)
     } catch (error) {
       console.error(error)
@@ -95,7 +77,7 @@ export const LogsPage = () => {
             const deviceName = parts[1]
             const pointName = parts[2].replace('OBJECT_', '').replace(/_/g, ' ')
             return (
-                <Space direction="vertical" size={0} style={{rowGap: 0}}>
+                <Space direction="vertical" size={0}>
                     <Text type="secondary" style={{fontSize: 11}}>{deviceName}</Text>
                     <Text strong style={{fontSize: 13}}>{pointName}</Text>
                 </Space>
@@ -166,7 +148,6 @@ export const LogsPage = () => {
         if (text && text.includes('->')) {
             const parts = text.split('->')
             const oldVal = parts[0].trim()
-            
             const newValPart = parts[1] ? parts[1].trim() : ''
             const newVal = newValPart.split('(')[0].trim()
             const extra = newValPart.includes('(') ? `(${newValPart.split('(')[1]}` : ''
@@ -189,9 +170,9 @@ export const LogsPage = () => {
     <>
         <div style={{ marginBottom: 24 }} data-aos="fade-down">
             <Title level={3} style={{ margin: 0, marginBottom: 8 }}>
-            <FileTextOutlined /> System Audit Logs
+              <FileTextOutlined /> System Audit Logs
             </Title>
-            <Text type="secondary">Track and monitor system activities, user actions, and value changes.</Text>
+            <Text type="secondary">Track system activities and user actions</Text>
         </div>
 
         <div data-aos="fade-up" data-aos-delay="100">
@@ -206,7 +187,6 @@ export const LogsPage = () => {
                             onChange={(dates) => setDateRange(dates as any)}
                             presets={[
                                 { label: 'Today', value: [dayjs(), dayjs()] },
-                                { label: 'Yesterday', value: [dayjs().subtract(1, 'd'), dayjs().subtract(1, 'd')] },
                                 { label: 'Last 7 Days', value: [dayjs().subtract(7, 'd'), dayjs()] },
                             ]}
                         />
@@ -220,21 +200,20 @@ export const LogsPage = () => {
                             options={[
                                 { value: 'all', label: 'All Users' },
                                 { value: 'Admin', label: 'Admin' },
-                                { value: 'System', label: 'System' },
                             ]}
                         />
                     </Col>
                     <Col xs={12} md={6} lg={4}>
-                        <Text strong>Action Type</Text>
+                        <Text strong>Action</Text>
                         <Select 
                             value={actionFilter}
                             onChange={setActionFilter}
                             style={{ width: '100%', marginTop: 8 }}
                             options={[
-                                { value: 'all', label: 'All Actions' },
-                                { value: 'write', label: 'Write Point' },
-                                { value: 'setting', label: 'System Setting' },
-                                { value: 'user', label: 'User Mgmt' },
+                                { value: 'all', label: 'All' },
+                                { value: 'write', label: 'Write' },
+                                { value: 'setting', label: 'Setting' },
+                                { value: 'user', label: 'User' },
                             ]}
                         />
                     </Col>
@@ -253,7 +232,7 @@ export const LogsPage = () => {
         </div>
 
         <div data-aos="fade-up" data-aos-delay="200">
-            <Card title="Log Records (Latest First)" styles={{ body: {padding: '0 24px 24px'} }}>
+            <Card title="Log Records">
                 <Table 
                     columns={columns} 
                     dataSource={logs} 
@@ -271,7 +250,7 @@ export const LogsPage = () => {
                             setCurrentPage(page)
                             if (newPageSize !== pageSize) {
                                 setPageSize(newPageSize)
-                                setCurrentPage(1) // รีเซ็ตกลับหน้าแรกเมื่อเปลี่ยนขนาดหน้า
+                                setCurrentPage(1)
                             }
                         }
                     }}

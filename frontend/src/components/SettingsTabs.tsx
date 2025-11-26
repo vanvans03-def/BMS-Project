@@ -1,3 +1,4 @@
+// frontend/src/components/SettingsTabs.tsx
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -10,10 +11,9 @@ import {
 import {
     SaveOutlined, ApiOutlined, DatabaseOutlined,
     PlusOutlined, GlobalOutlined, DeleteOutlined,
-    UserOutlined,
-    MailOutlined, EditOutlined
+    UserOutlined, MailOutlined, EditOutlined
 } from '@ant-design/icons'
-import { config } from '../config'
+import { authFetch } from '../utils/authFetch'
 import AOS from 'aos'
 
 const { Title, Text } = Typography
@@ -33,9 +33,8 @@ export const GeneralSettings = () => {
 
     const loadSettings = async () => {
         try {
-            const res = await fetch(`${config.apiUrl}/settings`)
+            const res = await authFetch('/settings')
             const data = await res.json()
-            console.log('General Settings Loaded:', data)
             form.setFieldsValue(data)
         } catch (err) {
             console.error('Load Error:', err)
@@ -43,12 +42,10 @@ export const GeneralSettings = () => {
     }
 
     const onFinish = async (values: any) => {
-        console.log('Saving General Settings:', values)
         setLoading(true)
         try {
-            const res = await fetch(`${config.apiUrl}/settings`, {
+            const res = await authFetch('/settings', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(values)
             })
             
@@ -60,7 +57,6 @@ export const GeneralSettings = () => {
             const result = await res.json()
             messageApi.success(result.message || 'Settings saved successfully')
         } catch (err: any) {
-            console.error(err)
             messageApi.error(`Failed to save: ${err.message}`)
         } finally {
             setLoading(false)
@@ -128,9 +124,8 @@ export const NetworkSettings = () => {
 
     const loadSettings = async () => {
         try {
-            const res = await fetch(`${config.apiUrl}/settings`)
+            const res = await authFetch('/settings')
             const data = await res.json()
-            console.log('Network Settings Loaded:', data)
             form.setFieldsValue(data)
         } catch (err) {
             console.error('Load Error:', err)
@@ -138,12 +133,10 @@ export const NetworkSettings = () => {
     }
 
     const onFinish = async (values: any) => {
-        console.log('Saving Network Settings:', values)
         setLoading(true)
         try {
-            const res = await fetch(`${config.apiUrl}/settings`, {
+            const res = await authFetch('/settings', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(values)
             })
 
@@ -153,7 +146,7 @@ export const NetworkSettings = () => {
             }
             
             const result = await res.json()
-            messageApi.success(result.message || 'Network settings saved. Please restart backend to apply.')
+            messageApi.success(result.message || 'Network settings saved')
         } catch (err: any) {
              messageApi.error(`Failed to save: ${err.message}`)
         } finally {
@@ -227,9 +220,8 @@ export const NetworkSettings = () => {
 }
 
 // ================================
-// 3. USER SETTINGS (Connected)
+// 3. USER SETTINGS
 // ================================
-
 export const UserSettings = () => {
     const [users, setUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
@@ -237,8 +229,6 @@ export const UserSettings = () => {
     const [editingUser, setEditingUser] = useState<any>(null)
     const [form] = Form.useForm()
     const [messageApi, contextHolder] = message.useMessage()
-
-    // [Pagination State] - เพิ่มส่วนนี้เพื่อให้เหมือน LogsPage
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(10)
 
@@ -250,7 +240,7 @@ export const UserSettings = () => {
     const loadUsers = async () => {
         setLoading(true)
         try {
-            const res = await fetch(`${config.apiUrl}/users`)
+            const res = await authFetch('/users')
             const data = await res.json()
             setUsers(Array.isArray(data) ? data : [])
         } catch (err) {
@@ -278,7 +268,7 @@ export const UserSettings = () => {
 
     const handleDelete = async (id: number) => {
         try {
-            const res = await fetch(`${config.apiUrl}/users/${id}`, { method: 'DELETE' })
+            const res = await authFetch(`/users/${id}`, { method: 'DELETE' })
             const data = await res.json()
             if (data.success) {
                 messageApi.success('User deleted successfully')
@@ -294,10 +284,7 @@ export const UserSettings = () => {
     const handleSubmit = async (values: any) => {
         setLoading(true)
         try {
-            const url = editingUser 
-                ? `${config.apiUrl}/users/${editingUser.id}` 
-                : `${config.apiUrl}/users`
-            
+            const url = editingUser ? `/users/${editingUser.id}` : '/users'
             const method = editingUser ? 'PUT' : 'POST'
             
             const { confirm_email, ...restValues } = values
@@ -311,9 +298,8 @@ export const UserSettings = () => {
                 delete payload.password
             }
             
-            const res = await fetch(url, {
+            const res = await authFetch(url, {
                 method,
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             })
 
@@ -326,18 +312,11 @@ export const UserSettings = () => {
                 loadUsers()
             } else {
                 const errorMsg = data.message || 'Operation failed'
-                if (errorMsg.includes('audit log')) {
-                     messageApi.warning('User saved but log recording failed')
-                     setIsModalOpen(false)
-                     form.resetFields()
-                     loadUsers()
-                } else {
-                     messageApi.error(errorMsg)
-                }
+                messageApi.error(errorMsg)
             }
         } catch (err) {
             console.error('Save user error:', err)
-            messageApi.error('Failed to save user. Check console for details.')
+            messageApi.error('Failed to save user')
         } finally {
             setLoading(false)
         }
@@ -389,7 +368,7 @@ export const UserSettings = () => {
                     </Button>
                     <Popconfirm 
                         title="Delete User" 
-                        description="Are you sure you want to delete this user?"
+                        description="Are you sure?"
                         onConfirm={() => handleDelete(record.id)}
                         okText="Yes"
                         cancelText="No"
@@ -409,43 +388,36 @@ export const UserSettings = () => {
                     type="primary" 
                     icon={<PlusOutlined />} 
                     onClick={handleAdd}
-                    data-aos="fade-left"
                 >
                     Add User
                 </Button>
             }
         >
             {contextHolder}
-            <div data-aos="fade-up">
-                <Table 
-                    dataSource={users} 
-                    columns={columns} 
-                    rowKey="id" 
-                    loading={loading}
-                    // [UPDATED] ใช้ size="middle" ให้เหมือนหน้า Logs
-                    size="middle"
-                    // [UPDATED] Pagination Config แบบเดียวกับหน้า Logs เป๊ะๆ
-                    pagination={{ 
-                        current: currentPage,
-                        pageSize: pageSize,
-                        total: users.length,
-                        showSizeChanger: true,
-                        showQuickJumper: true, // จะแสดงช่อง Go to เมื่อมีหลายหน้า
-                        pageSizeOptions: ['10', '20', '50', '100'],
-                        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} users`,
-                        onChange: (page, newPageSize) => {
-                            setCurrentPage(page)
-                            if (newPageSize !== pageSize) {
-                                setPageSize(newPageSize)
-                                setCurrentPage(1) // รีเซ็ตกลับหน้า 1 เมื่อเปลี่ยนขนาด
-                            }
+            <Table 
+                dataSource={users} 
+                columns={columns} 
+                rowKey="id" 
+                loading={loading}
+                size="middle"
+                pagination={{ 
+                    current: currentPage,
+                    pageSize: pageSize,
+                    total: users.length,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    pageSizeOptions: ['10', '20', '50', '100'],
+                    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} users`,
+                    onChange: (page, newPageSize) => {
+                        setCurrentPage(page)
+                        if (newPageSize !== pageSize) {
+                            setPageSize(newPageSize)
+                            setCurrentPage(1)
                         }
-                    }}
-                    scroll={{ x: 600 }} 
-                />
-            </div>
+                    }
+                }}
+            />
 
-            {/* Modal for Add/Edit User */}
             <Modal
                 title={editingUser ? 'Edit User' : 'Add New User'}
                 open={isModalOpen}
@@ -460,24 +432,20 @@ export const UserSettings = () => {
                     <Form.Item 
                         name="username" 
                         label="Username" 
-                        rules={[{ required: true, message: 'Please enter username' }]}
+                        rules={[{ required: true }]}
                     >
                         <Input prefix={<UserOutlined />} disabled={!!editingUser} />
                     </Form.Item>
 
                     <Form.Item 
                         name="password" 
-                        label={editingUser ? "New Password (leave empty to keep current)" : "Password"}
-                        rules={[{ required: !editingUser, message: 'Please enter password' }]}
+                        label={editingUser ? "New Password (optional)" : "Password"}
+                        rules={[{ required: !editingUser }]}
                     >
                         <Input.Password />
                     </Form.Item>
 
-                    <Form.Item 
-                        name="role" 
-                        label="Role" 
-                        rules={[{ required: true, message: 'Please select role' }]}
-                    >
+                    <Form.Item name="role" label="Role" rules={[{ required: true }]}>
                         <Select>
                             <Select.Option value="Admin">Admin</Select.Option>
                             <Select.Option value="Operator">Operator</Select.Option>
@@ -489,11 +457,11 @@ export const UserSettings = () => {
                         name="email" 
                         label="Email"
                         rules={[
-                            { type: 'email', message: 'The input is not valid E-mail!' },
-                            { required: true, message: 'Please input your E-mail!' }
+                            { type: 'email', message: 'Invalid email' },
+                            { required: true }
                         ]}
                     >
-                        <Input prefix={<MailOutlined />} placeholder="user@example.com" />
+                        <Input prefix={<MailOutlined />} />
                     </Form.Item>
 
                     {!editingUser && (
@@ -501,20 +469,19 @@ export const UserSettings = () => {
                             name="confirm_email" 
                             label="Confirm Email"
                             dependencies={['email']}
-                            hasFeedback
                             rules={[
-                                { required: true, message: 'Please confirm your E-mail!' },
+                                { required: true },
                                 ({ getFieldValue }) => ({
                                     validator(_, value) {
                                         if (!value || getFieldValue('email') === value) {
                                             return Promise.resolve();
                                         }
-                                        return Promise.reject(new Error('The two emails that you entered do not match!'));
+                                        return Promise.reject(new Error('Emails do not match'));
                                     },
                                 }),
                             ]}
                         >
-                            <Input prefix={<MailOutlined />} placeholder="Confirm Email" />
+                            <Input prefix={<MailOutlined />} />
                         </Form.Item>
                     )}
 
@@ -547,7 +514,7 @@ export const UserSettings = () => {
 }
 
 // ================================
-// 4. DATABASE SETTINGS (Connected)
+// 4. DATABASE SETTINGS
 // ================================
 export const DatabaseSettings = () => {
     const [stats, setStats] = useState<any>({})
@@ -564,7 +531,7 @@ export const DatabaseSettings = () => {
     const loadStats = async () => {
         setLoading(true)
         try {
-            const res = await fetch(`${config.apiUrl}/database/stats`)
+            const res = await authFetch('/database/stats')
             const data = await res.json()
             setStats(data)
         } catch (err) {
@@ -577,10 +544,10 @@ export const DatabaseSettings = () => {
     const handleOptimize = async () => {
         setLoading(true)
         try {
-            const res = await fetch(`${config.apiUrl}/database/optimize`, { method: 'POST' })
+            const res = await authFetch('/database/optimize', { method: 'POST' })
             const data = await res.json()
             if (data.success) {
-                messageApi.success('Database optimized successfully')
+                messageApi.success('Database optimized')
             }
         } catch (err) {
             messageApi.error('Optimization failed')
@@ -597,21 +564,20 @@ export const DatabaseSettings = () => {
 
         setLoading(true)
         try {
-            const res = await fetch(`${config.apiUrl}/database/clear-all`, {
+            const res = await authFetch('/database/clear-all', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ confirmText })
             })
 
             const data = await res.json()
             
             if (data.success) {
-                messageApi.success('All data has been deleted')
+                messageApi.success('All data deleted')
                 setIsModalOpen(false)
                 setConfirmText('')
                 loadStats()
             } else {
-                messageApi.error(data.message || 'Operation failed')
+                messageApi.error(data.message || 'Failed')
             }
         } catch (err) {
             messageApi.error('Failed to clear data')
@@ -623,177 +589,125 @@ export const DatabaseSettings = () => {
     return (
         <Card>
             {contextHolder}
-            <div data-aos="fade-up">
-                <Title level={5}>System Statistics</Title>
-                <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-                    <Col xs={24} sm={12} md={6}>
-                        <div data-aos="flip-left">
-                            <Card size="small">
-                                <Statistic 
-                                    title="Total Devices" 
-                                    value={stats.totalDevices || 0} 
-                                    prefix={<ApiOutlined />} 
-                                    suffix="Units" 
-                                />
-                            </Card>
-                        </div>
-                    </Col>
-                    <Col xs={24} sm={12} md={6}>
-                        <div data-aos="flip-right">
-                            <Card size="small">
-                                <Statistic 
-                                    title="Total Points" 
-                                    value={stats.totalPoints || 0} 
-                                    prefix={<DatabaseOutlined />} 
-                                    suffix="Points" 
-                                />
-                            </Card>
-                        </div>
-                    </Col>
-                    <Col xs={24} sm={12} md={6}>
-                        <div data-aos="flip-left" data-aos-delay="100">
-                            <Card size="small">
-                                <Statistic 
-                                    title="Active Devices" 
-                                    value={stats.activeDevices || 0} 
-                                    prefix={<ApiOutlined />}
-                                    valueStyle={{ color: '#52c41a' }}
-                                />
-                            </Card>
-                        </div>
-                    </Col>
-                    <Col xs={24} sm={12} md={6}>
-                        <div data-aos="flip-right" data-aos-delay="100">
-                            <Card size="small">
-                                <Statistic 
-                                    title="Database Size" 
-                                    value={stats.databaseSize || 'N/A'} 
-                                    prefix={<DatabaseOutlined />}
-                                />
-                            </Card>
-                        </div>
-                    </Col>
-                </Row>
-            </div>
+            <Title level={5}>System Statistics</Title>
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col xs={24} sm={12} md={6}>
+                    <Card size="small">
+                        <Statistic 
+                            title="Total Devices" 
+                            value={stats.totalDevices || 0} 
+                            prefix={<ApiOutlined />} 
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card size="small">
+                        <Statistic 
+                            title="Total Points" 
+                            value={stats.totalPoints || 0} 
+                            prefix={<DatabaseOutlined />} 
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card size="small">
+                        <Statistic 
+                            title="Active Devices" 
+                            value={stats.activeDevices || 0} 
+                            valueStyle={{ color: '#52c41a' }}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card size="small">
+                        <Statistic 
+                            title="Database Size" 
+                            value={stats.databaseSize || 'N/A'} 
+                        />
+                    </Card>
+                </Col>
+            </Row>
 
             <Divider />
 
-            <div data-aos="fade-up" data-aos-delay="100">
-                <Title level={5}>Database Maintenance</Title>
-                <Space direction="vertical" style={{ width: '100%' }} size="large">
-                    <Card size="small">
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                            <Text strong>Optimize Database</Text>
-                            <Text type="secondary">
-                                Run VACUUM ANALYZE to optimize database performance
-                            </Text>
-                            <Button 
-                                icon={<ApiOutlined />} 
-                                onClick={handleOptimize}
-                                loading={loading}
-                            >
-                                Optimize Now
-                            </Button>
-                        </Space>
-                    </Card>
-
-                    <Card size="small">
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                            <Text strong>Backup Information</Text>
-                            <Row gutter={16}>
-                                <Col span={12}>
-                                    <Text type="secondary">Last Backup:</Text>
-                                    <br />
-                                    <Text>
-                                        {stats.lastBackup 
-                                            ? new Date(stats.lastBackup).toLocaleString('th-TH') 
-                                            : 'Never'}
-                                    </Text>
-                                </Col>
-                                <Col span={12}>
-                                    <Text type="secondary">Size:</Text>
-                                    <br />
-                                    <Text>{stats.databaseSize || 'N/A'}</Text>
-                                </Col>
-                            </Row>
-                        </Space>
-                    </Card>
-                </Space>
-            </div>
-
-            <Divider />
-
-            <div data-aos="fade-up" data-aos-delay="100">
-                <Title level={5} type="danger">Danger Zone</Title>
-                <Alert 
-                    message="Factory Reset" 
-                    description="This action will permanently delete all devices, points, and settings. Users will not be affected." 
-                    type="error" 
-                    showIcon 
-                    action={
+            <Title level={5}>Maintenance</Title>
+            <Space direction="vertical" style={{ width: '100%' }} size="large">
+                <Card size="small">
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                        <Text strong>Optimize Database</Text>
                         <Button 
-                            danger 
-                            type="primary" 
-                            icon={<DeleteOutlined />}
-                            onClick={() => setIsModalOpen(true)}
+                            icon={<ApiOutlined />} 
+                            onClick={handleOptimize}
+                            loading={loading}
                         >
-                            Clear All Data
+                            Optimize Now
                         </Button>
-                    } 
-                />
-            </div>
+                    </Space>
+                </Card>
+            </Space>
 
-            {/* Confirmation Modal */}
+            <Divider />
+
+            <Title level={5} type="danger">Danger Zone</Title>
+            <Alert 
+                message="Factory Reset" 
+                description="Delete all devices and points permanently" 
+                type="error" 
+                showIcon 
+                action={
+                    <Button 
+                        danger 
+                        type="primary" 
+                        icon={<DeleteOutlined />}
+                        onClick={() => setIsModalOpen(true)}
+                    >
+                        Clear All
+                    </Button>
+                } 
+            />
+
             <Modal
-                title="⚠️ Factory Reset Confirmation"
+                title="⚠️ Factory Reset"
                 open={isModalOpen}
                 onCancel={() => {
                     setIsModalOpen(false)
                     setConfirmText('')
                 }}
                 footer={null}
-                destroyOnHidden
             >
                 <Alert
-                    message="This action cannot be undone!"
-                    description="All devices, points, and settings will be permanently deleted. Please type DELETE ALL DATA to confirm."
+                    message="Cannot be undone!"
                     type="error"
                     showIcon
                     style={{ marginBottom: 16 }}
                 />
 
-                <Form layout="vertical" onFinish={handleFactoryReset}>
-                    <Form.Item 
-                        label="Type DELETE ALL DATA to confirm"
-                        required
-                    >
+                <Form onFinish={handleFactoryReset}>
+                    <Form.Item label="Type DELETE ALL DATA">
                         <Input
                             value={confirmText}
                             onChange={(e) => setConfirmText(e.target.value)}
                             placeholder="DELETE ALL DATA"
-                            size="large"
                         />
                     </Form.Item>
 
-                    <Form.Item>
-                        <Space>
-                            <Button 
-                                danger 
-                                type="primary" 
-                                htmlType="submit"
-                                loading={loading}
-                                disabled={confirmText !== 'DELETE ALL DATA'}
-                            >
-                                Confirm Delete
-                            </Button>
-                            <Button onClick={() => {
-                                setIsModalOpen(false)
-                                setConfirmText('')
-                            }}>
-                                Cancel
-                            </Button>
-                        </Space>
-                    </Form.Item>
+                    <Space>
+                        <Button 
+                            danger 
+                            type="primary" 
+                            htmlType="submit"
+                            loading={loading}
+                            disabled={confirmText !== 'DELETE ALL DATA'}
+                        >
+                            Confirm Delete
+                        </Button>
+                        <Button onClick={() => {
+                            setIsModalOpen(false)
+                            setConfirmText('')
+                        }}>
+                            Cancel
+                        </Button>
+                    </Space>
                 </Form>
             </Modal>
         </Card>
