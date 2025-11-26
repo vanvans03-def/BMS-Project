@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import {
     Form, Input, InputNumber, Button, Card,
     Alert, Table, Space, Popconfirm, Statistic,
-    Row, Col, message, Typography, Divider, Modal, Select, Spin, Tag
+    Row, Col, message, Typography, Divider, Modal, Select, Spin, Tag, Drawer, Descriptions
 } from 'antd'
 import {
     SaveOutlined, ApiOutlined, DatabaseOutlined,
@@ -99,7 +99,13 @@ export const GeneralSettings = () => {
                     <Divider />
 
                     <div data-aos="fade-up" data-aos-delay="250">
-                        <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
+                        <Button 
+                            type="primary" 
+                            htmlType="submit" 
+                            icon={<SaveOutlined />} 
+                            loading={loading}
+                            block={window.innerWidth < 576}
+                        >
                             Save Changes
                         </Button>
                     </div>
@@ -168,7 +174,7 @@ export const NetworkSettings = () => {
             </div>
 
             <Form form={form} layout="vertical" onFinish={onFinish}>
-                <Row gutter={24}>
+                <Row gutter={[16, 24]}>
                     <Col xs={24} lg={12}>
                         <div data-aos="fade-right" data-aos-delay="100">
                             <Title level={5}><ApiOutlined /> Local Device Identity</Title>
@@ -189,12 +195,12 @@ export const NetworkSettings = () => {
                         <div data-aos="fade-left" data-aos-delay="100">
                             <Title level={5}><GlobalOutlined /> Communication</Title>
                             <Row gutter={16}>
-                                <Col span={12}>
+                                <Col xs={24} sm={12}>
                                     <Form.Item name="bacnet_port" label="UDP Port">
                                         <InputNumber style={{ width: '100%' }} placeholder="47808" />
                                     </Form.Item>
                                 </Col>
-                                <Col span={12}>
+                                <Col xs={24} sm={12}>
                                     <Form.Item name="discovery_timeout" label="Timeout (ms)">
                                         <InputNumber style={{ width: '100%' }} step={1000} />
                                     </Form.Item>
@@ -210,7 +216,13 @@ export const NetworkSettings = () => {
                 <Divider />
 
                 <div data-aos="fade-up" data-aos-delay="200">
-                    <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
+                    <Button 
+                        type="primary" 
+                        htmlType="submit" 
+                        icon={<SaveOutlined />} 
+                        loading={loading}
+                        block={window.innerWidth < 576}
+                    >
                         Save Network Configuration
                     </Button>
                 </div>
@@ -220,12 +232,14 @@ export const NetworkSettings = () => {
 }
 
 // ================================
-// 3. USER SETTINGS
+// 3. USER SETTINGS (RESPONSIVE)
 // ================================
 export const UserSettings = () => {
     const [users, setUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+    const [selectedUser, setSelectedUser] = useState<any>(null)
     const [editingUser, setEditingUser] = useState<any>(null)
     const [form] = Form.useForm()
     const [messageApi, contextHolder] = message.useMessage()
@@ -250,7 +264,6 @@ export const UserSettings = () => {
         }
     }
 
-    // ... (handleAdd, handleEdit, handleDelete, handleSubmit คงเดิม) ...
     const handleAdd = () => {
         setEditingUser(null)
         form.resetFields()
@@ -323,29 +336,68 @@ export const UserSettings = () => {
         }
     }
 
+    const formatLastLogin = (date: string) => {
+        if (!date) return 'Never'
+        const dateObj = new Date(date)
+        const thaiTime = dateObj.toLocaleString('en-US', {
+            timeZone: 'Asia/Bangkok',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        })
+        return thaiTime
+    }
+
+    // Desktop columns
     const columns = [
         {
             title: 'Username',
             dataIndex: 'username',
             key: 'username',
-            render: (text: string) => <Text strong>{text}</Text>
+            render: (text: string) => <Text strong>{text}</Text>,
+            responsive: ['md'] as any
+        },
+        {
+            title: 'User Info',
+            key: 'userInfo',
+            responsive: ['xs'] as any,
+            render: (_: any, record: any) => (
+                <Space direction="vertical" size={0}>
+                    <Text strong>{record.username}</Text>
+                    <Space size={4}>
+                        <Tag color={record.role === 'Admin' ? 'red' : 'geekblue'} style={{ margin: 0 }}>
+                            {record.role}
+                        </Tag>
+                        <Tag color={record.is_active ? 'success' : 'default'} style={{ margin: 0 }}>
+                            {record.is_active ? 'Active' : 'Inactive'}
+                        </Tag>
+                    </Space>
+                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                        {record.email || '-'}
+                    </Text>
+                </Space>
+            )
         },
         {
             title: 'Role',
             dataIndex: 'role',
             key: 'role',
+            responsive: ['md'] as any,
             render: (role: string) => (
                 <Tag color={role === 'Admin' ? 'red' : 'geekblue'}>
                     {role}
                 </Tag>
             )
         },
-        // [NEW] เพิ่ม Column Status
         {
             title: 'Status',
             dataIndex: 'is_active',
             key: 'is_active',
             align: 'center' as const,
+            responsive: ['md'] as any,
             render: (isActive: boolean) => (
                 <Tag color={isActive ? 'success' : 'default'}>
                     {isActive ? 'Active' : 'Inactive'}
@@ -356,48 +408,29 @@ export const UserSettings = () => {
             title: 'Email',
             dataIndex: 'email',
             key: 'email',
-            responsive: ['md'] as any,
+            responsive: ['lg'] as any,
             render: (email: string) => email || <Text type="secondary">-</Text>
         },
         {
             title: 'Last Login',
             dataIndex: 'last_login',
             key: 'lastLogin',
-            responsive: ['lg'] as any,
-           render: (date: string) => {
-                if (!date) return <Tag color="default">Never</Tag>
-
-                const dateObj = new Date(date);
-                
-                // แปลงเป็นเวลาไทยด้วย toLocaleString แล้ว parse เอง
-                const thaiTime = dateObj.toLocaleString('en-US', {
-                    timeZone: 'Asia/Bangkok',
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false
-                });
-                
-                console.log('Thai time:', thaiTime); // ดูว่าได้อะไร
-                
-                return <Text>{thaiTime}</Text>
-            }
+            responsive: ['xl'] as any,
+            render: (date: string) => <Text>{formatLastLogin(date)}</Text>
         },
         {
             title: 'Action',
             key: 'action',
-            width: 150,
+            fixed: 'right' as const,
+            width: window.innerWidth < 768 ? 80 : 150,
             render: (_: any, record: any) => (
-                <Space>
+                <Space size="small">
                     <Button
                         size="small"
                         onClick={() => handleEdit(record)}
                         icon={<EditOutlined />}
                     >
-                        Edit
+                        {window.innerWidth >= 768 && 'Edit'}
                     </Button>
                     <Popconfirm
                         title="Delete User"
@@ -406,7 +439,9 @@ export const UserSettings = () => {
                         okText="Yes"
                         cancelText="No"
                     >
-                        <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
+                        <Button size="small" danger icon={<DeleteOutlined />}>
+                            {window.innerWidth >= 768 && 'Delete'}
+                        </Button>
                     </Popconfirm>
                 </Space>
             )
@@ -415,14 +450,15 @@ export const UserSettings = () => {
 
     return (
         <Card
-            title="User Management"
+            title={<span style={{ fontSize: window.innerWidth < 768 ? '16px' : '20px' }}>User Management</span>}
             extra={
                 <Button
                     type="primary"
                     icon={<PlusOutlined />}
                     onClick={handleAdd}
+                    size={window.innerWidth < 768 ? 'small' : 'middle'}
                 >
-                    Add User
+                    {window.innerWidth >= 768 ? 'Add User' : 'Add'}
                 </Button>
             }
         >
@@ -432,22 +468,27 @@ export const UserSettings = () => {
                 columns={columns}
                 rowKey="id"
                 loading={loading}
-                size="middle"
+                size={window.innerWidth < 768 ? 'small' : 'middle'}
+                scroll={{ x: 'max-content' }}
                 pagination={{
                     current: currentPage,
                     pageSize: pageSize,
                     total: users.length,
                     showSizeChanger: true,
-                    showQuickJumper: true,
+                    showQuickJumper: window.innerWidth >= 768,
                     pageSizeOptions: ['10', '20', '50', '100'],
-                    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} users`,
+                    showTotal: (total, range) => 
+                        window.innerWidth >= 768 
+                            ? `${range[0]}-${range[1]} of ${total} users`
+                            : `${range[0]}-${range[1]}/${total}`,
                     onChange: (page, newPageSize) => {
                         setCurrentPage(page)
                         if (newPageSize !== pageSize) {
                             setPageSize(newPageSize)
                             setCurrentPage(1)
                         }
-                    }
+                    },
+                    simple: window.innerWidth < 576
                 }}
             />
 
@@ -459,7 +500,8 @@ export const UserSettings = () => {
                     form.resetFields()
                 }}
                 footer={null}
-                destroyOnHidden
+                destroyOnClose
+                width={window.innerWidth < 768 ? '95%' : 520}
             >
                 <Form form={form} layout="vertical" onFinish={handleSubmit}>
                     <Form.Item
@@ -518,7 +560,6 @@ export const UserSettings = () => {
                         </Form.Item>
                     )}
 
-                    {/* [UPDATED] Form สำหรับแก้ไข Active Status */}
                     {editingUser && (
                         <Form.Item name="is_active" label="Status">
                             <Select>
@@ -533,15 +574,15 @@ export const UserSettings = () => {
                     )}
 
                     <Form.Item>
-                        <Space>
-                            <Button type="primary" htmlType="submit" loading={loading}>
-                                {editingUser ? 'Update' : 'Create'}
-                            </Button>
+                        <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
                             <Button onClick={() => {
                                 setIsModalOpen(false)
                                 form.resetFields()
                             }}>
                                 Cancel
+                            </Button>
+                            <Button type="primary" htmlType="submit" loading={loading}>
+                                {editingUser ? 'Update' : 'Create'}
                             </Button>
                         </Space>
                     </Form.Item>
@@ -562,7 +603,6 @@ export const DatabaseSettings = () => {
     const [messageApi, contextHolder] = message.useMessage()
 
     useEffect(() => {
-        // Refresh AOS เมื่อโหลดหน้าเสร็จ เพื่อให้อนิเมชั่นทำงาน
         AOS.refresh()
         loadStats()
     }, [])
@@ -633,48 +673,52 @@ export const DatabaseSettings = () => {
             </div>
 
             <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-                <Col xs={24} sm={12} md={6}>
-                    {/* ใช้ AOS fade-up และ delay เพื่อให้เด้งขึ้นมาทีละอัน */}
+                <Col xs={12} sm={12} md={6}>
                     <div data-aos="fade-up" data-aos-delay="100">
                         <Card size="small">
                             <Statistic
                                 title="Total Devices"
                                 value={stats.totalDevices || 0}
                                 prefix={<ApiOutlined />}
+                                valueStyle={{ fontSize: window.innerWidth < 768 ? '20px' : '24px' }}
                             />
                         </Card>
                     </div>
                 </Col>
-                <Col xs={24} sm={12} md={6}>
+                <Col xs={12} sm={12} md={6}>
                     <div data-aos="fade-up" data-aos-delay="200">
                         <Card size="small">
                             <Statistic
                                 title="Total Points"
                                 value={stats.totalPoints || 0}
                                 prefix={<DatabaseOutlined />}
+                                valueStyle={{ fontSize: window.innerWidth < 768 ? '20px' : '24px' }}
                             />
                         </Card>
                     </div>
                 </Col>
-                <Col xs={24} sm={12} md={6}>
+                <Col xs={12} sm={12} md={6}>
                     <div data-aos="fade-up" data-aos-delay="300">
                         <Card size="small">
                             <Statistic
                                 title="Active Devices"
                                 value={stats.activeDevices || 0}
-                                valueStyle={{ color: '#52c41a' }}
+                                valueStyle={{ 
+                                    color: '#52c41a',
+                                    fontSize: window.innerWidth < 768 ? '20px' : '24px'
+                                }}
                             />
                         </Card>
                     </div>
                 </Col>
-                <Col xs={24} sm={12} md={6}>
+                <Col xs={12} sm={12} md={6}>
                     <div data-aos="fade-up" data-aos-delay="400">
                         <Card size="small">
                             <Statistic
                                 title="Database Size"
-                                // ถ้า loading ให้ใส่ค่าว่างไว้ก่อน แล้วให้ formatter จัดการแสดง Spin
                                 value={loading ? " " : (stats.databaseSize || 'N/A')}
                                 formatter={(value) => loading ? <Spin size="small" /> : value}
+                                valueStyle={{ fontSize: window.innerWidth < 768 ? '20px' : '24px' }}
                             />
                         </Card>
                     </div>
@@ -693,6 +737,7 @@ export const DatabaseSettings = () => {
                                 icon={<ApiOutlined />}
                                 onClick={handleOptimize}
                                 loading={loading}
+                                block={window.innerWidth < 576}
                             >
                                 Optimize Now
                             </Button>
@@ -703,7 +748,7 @@ export const DatabaseSettings = () => {
 
             <Divider />
 
-            <div data-aos="fade-up" data-aos-delay="4000">
+            <div data-aos="fade-up" data-aos-delay="600">
                 <Title level={5} type="danger">Danger Zone</Title>
                 <Alert
                     message="Factory Reset"
@@ -717,6 +762,9 @@ export const DatabaseSettings = () => {
                             icon={<DeleteOutlined />}
                             onClick={() => setIsModalOpen(true)}
                             disabled={loading}
+                            size={window.innerWidth < 768 ? 'small' : 'middle'}
+                            block={window.innerWidth < 576}
+                            style={{ marginTop: window.innerWidth < 576 ? 8 : 0 }}
                         >
                             Clear All
                         </Button>
@@ -732,6 +780,7 @@ export const DatabaseSettings = () => {
                     setConfirmText('')
                 }}
                 footer={null}
+                width={window.innerWidth < 768 ? '95%' : 520}
             >
                 <Alert
                     message="Cannot be undone!"
@@ -749,7 +798,13 @@ export const DatabaseSettings = () => {
                         />
                     </Form.Item>
 
-                    <Space>
+                    <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+                        <Button onClick={() => {
+                            setIsModalOpen(false)
+                            setConfirmText('')
+                        }}>
+                            Cancel
+                        </Button>
                         <Button
                             danger
                             type="primary"
@@ -758,12 +813,6 @@ export const DatabaseSettings = () => {
                             disabled={confirmText !== 'DELETE ALL DATA'}
                         >
                             Confirm Delete
-                        </Button>
-                        <Button onClick={() => {
-                            setIsModalOpen(false)
-                            setConfirmText('')
-                        }}>
-                            Cancel
                         </Button>
                     </Space>
                 </Form>
