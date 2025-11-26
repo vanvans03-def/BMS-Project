@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { settingsService } from '../services/settings.service'
+import { getActorName } from '../utils/auth.utils'
 
 export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
@@ -7,10 +8,10 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     return await settingsService.getSettings()
   })
 
-  .put('/', async ({ body }) => {
+  .put('/', async ({ body, request }) => {
     const newSettings = body as Record<string, any>
-    // เรียก Service บรรทัดเดียวจบ (Service จัดการทั้ง DB และ Log)
-    await settingsService.updateSettings(newSettings, 'Admin') 
+    const userName = getActorName(request)
+    await settingsService.updateSettings(newSettings, userName) 
     
     return { success: true, message: 'Settings saved successfully' }
   }, {

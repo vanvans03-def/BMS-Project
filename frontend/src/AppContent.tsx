@@ -1,4 +1,3 @@
-// frontend/src/AppContent.tsx
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -25,6 +24,7 @@ import { DiscoveryModal } from "./components/DiscoveryModal"
 import { DeviceStatsCards, PointStatsCards } from "./components/StatsCards"
 import { GeneralSettings, NetworkSettings, UserSettings, DatabaseSettings } from "./components/SettingsTabs"
 import { LogsPage } from "./components/LogsPage"
+import { ProfileModal } from "./components/ProfileModal" // [1] Import ProfileModal
 
 const { Header, Content, Sider } = Layout
 const { Title, Text } = Typography
@@ -89,6 +89,8 @@ function AppContent() {
   const [writeValue, setWriteValue] = useState<string | number>("")
   const [writePriority, setWritePriority] = useState<number>(8)
   const [isWriting, setIsWriting] = useState(false)
+
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
   const { data: settings, refetch: refetchSettings } = useQuery<SystemSettings>({
     queryKey: ["settings"],
@@ -320,13 +322,14 @@ function AppContent() {
     }
   }
 
-  // User Dropdown Menu
+  // [3] User Dropdown Menu - ผูกฟังก์ชันเปิด Modal
   const userMenu = {
     items: [
       {
         key: 'profile',
         icon: <UserOutlined />,
         label: 'Profile',
+        onClick: () => setIsProfileModalOpen(true) // เพิ่ม onClick
       },
       {
         type: 'divider' as const,
@@ -611,6 +614,10 @@ function AppContent() {
               onWrite={handleWriteValue}
               onValueChange={setWriteValue}
               onPriorityChange={setWritePriority}
+            />
+            <ProfileModal 
+              open={isProfileModalOpen}
+              onClose={() => setIsProfileModalOpen(false)}
             />
           </Content>
         </Layout>

@@ -1,14 +1,13 @@
 import { Elysia, t } from 'elysia'
 import { pointsService } from '../services/points.service'
+import { getActorName } from '../utils/auth.utils' 
 
 export const pointsRoutes = new Elysia({ prefix: '/points' })
 
-  // 1. ดึงรายชื่อ Points
   .get('/:deviceId', async ({ params: { deviceId } }) => {
     return await pointsService.getPointsByDeviceId(Number(deviceId))
   })
 
-  // 2. Sync ข้อมูล
   .post('/sync', async ({ body }) => {
     const { deviceId } = body
     return await pointsService.syncPointsFromDevice(deviceId)
@@ -16,11 +15,10 @@ export const pointsRoutes = new Elysia({ prefix: '/points' })
     body: t.Object({ deviceId: t.Number() })
   })
 
-  // 3. เขียนค่า (Write Value)
-  .post('/write', async ({ body }) => {
+  .post('/write', async ({ body, request }) => {
     const { deviceId, pointId, value, priority } = body 
-    // ในอนาคต user_name ควรรับมาจาก JWT/Session ตอนนี้ Hardcode ไปก่อน
-    const userName = 'Admin' 
+    
+    const userName = getActorName(request)
 
     return await pointsService.writePointValue(deviceId, pointId, value, priority, userName)
   }, {
