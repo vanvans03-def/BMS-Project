@@ -1,3 +1,4 @@
+// backend/src/services/auth.service.ts
 import { sql } from '../db'
 import jwt from 'jsonwebtoken'
 
@@ -17,11 +18,18 @@ export const authService = {
 
     if (!user) return null
 
-    // 2. ตรวจสอบ Password (ใช้ Bun.password.verify ที่รองรับ Argon2 จากตอน Create User)
+    // 2. ตรวจสอบ Password
     const isMatch = await Bun.password.verify(password, user.password)
     if (!isMatch) return null
 
-    // 3. สร้าง Token (แนบ id, role ไปด้วย)
+    // [UPDATED] 3. อัปเดต Last Login Time
+    await sql`
+      UPDATE users 
+      SET last_login = NOW() 
+      WHERE id = ${user.id}
+    `
+
+    // 4. สร้าง Token
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -29,7 +37,7 @@ export const authService = {
         role: user.role 
       },
       JWT_SECRET,
-      { expiresIn: '1d' } // Token อายุ 1 วัน
+      { expiresIn: '1d' }
     )
 
     return token

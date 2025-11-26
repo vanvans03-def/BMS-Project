@@ -61,7 +61,7 @@ export const LoginPage = () => {
             borderRadius: borderRadiusLG,
             background: colorBgContainer
           }}
-          bordered={false}
+          variant="borderless"
         >
           <Form
             name="login"
@@ -105,7 +105,7 @@ export const LoginPage = () => {
             
             <div style={{ textAlign: 'center' }}>
                 <Text type="secondary" style={{ fontSize: 13 }}>
-                   Default: admin / password
+                   Default: admin / 1234
                 </Text>
             </div>
           </Form>
@@ -113,7 +113,7 @@ export const LoginPage = () => {
       </Content>
 
       <Footer style={{ textAlign: 'center', background: 'transparent' }}>
-        BMS Project ©{new Date().getFullYear()} Created by YourTeam
+        BMS Project ©{new Date().getFullYear()} Created by CocoaD
       </Footer>
     </Layout>
   )

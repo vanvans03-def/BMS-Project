@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import {
     Form, Input, InputNumber, Button, Card,
     Alert, Table, Space, Popconfirm, Statistic,
-    Row, Col, message, Typography, Divider, Modal, Select, Spin
+    Row, Col, message, Typography, Divider, Modal, Select, Spin, Tag
 } from 'antd'
 import {
     SaveOutlined, ApiOutlined, DatabaseOutlined,
@@ -48,12 +48,12 @@ export const GeneralSettings = () => {
                 method: 'PUT',
                 body: JSON.stringify(values)
             })
-            
+
             if (!res.ok) {
                 const errorData = await res.json()
                 throw new Error(errorData.message || 'Server error')
             }
-            
+
             const result = await res.json()
             messageApi.success(result.message || 'Settings saved successfully')
         } catch (err: any) {
@@ -67,37 +67,37 @@ export const GeneralSettings = () => {
         <Card>
             {contextHolder}
             <div data-aos="fade-up">
-                <Form 
-                    form={form} 
-                    layout="vertical" 
+                <Form
+                    form={form}
+                    layout="vertical"
                     onFinish={onFinish}
                     initialValues={{ site_name: '', description: '', contact_info: '' }}
                 >
                     <div data-aos="fade-up" data-aos-delay="100">
                         <Title level={5}><GlobalOutlined /> Site Information</Title>
-                        <Form.Item 
-                            name="site_name" 
-                            label="Site Name" 
+                        <Form.Item
+                            name="site_name"
+                            label="Site Name"
                             rules={[{ required: true, message: 'Please enter site name' }]}
                         >
                             <Input placeholder="Project Name e.g. Building A" />
                         </Form.Item>
                     </div>
-                    
+
                     <div data-aos="fade-up" data-aos-delay="150">
                         <Form.Item name="description" label="Description">
                             <Input.TextArea rows={5} placeholder="Site details, location, notes..." />
                         </Form.Item>
                     </div>
-                    
+
                     <div data-aos="fade-up" data-aos-delay="200">
                         <Form.Item name="contact_info" label="Contact Info">
                             <Input prefix={<UserOutlined />} placeholder="Admin Email / Phone" />
                         </Form.Item>
                     </div>
-                    
+
                     <Divider />
-                    
+
                     <div data-aos="fade-up" data-aos-delay="250">
                         <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
                             Save Changes
@@ -144,11 +144,11 @@ export const NetworkSettings = () => {
                 const errorData = await res.json()
                 throw new Error(errorData.message || 'Update failed')
             }
-            
+
             const result = await res.json()
             messageApi.success(result.message || 'Network settings saved')
         } catch (err: any) {
-             messageApi.error(`Failed to save: ${err.message}`)
+            messageApi.error(`Failed to save: ${err.message}`)
         } finally {
             setLoading(false)
         }
@@ -173,10 +173,10 @@ export const NetworkSettings = () => {
                         <div data-aos="fade-right" data-aos-delay="100">
                             <Title level={5}><ApiOutlined /> Local Device Identity</Title>
                             <Card size="small" style={{ background: '#fafafa' }}>
-                                <Form.Item 
-                                    name="bacnet_device_id" 
-                                    label="Device Instance ID" 
-                                    extra="Must be unique in the network" 
+                                <Form.Item
+                                    name="bacnet_device_id"
+                                    label="Device Instance ID"
+                                    extra="Must be unique in the network"
                                     rules={[{ required: true, message: 'Device ID is required' }]}
                                 >
                                     <InputNumber style={{ width: '100%' }} min={0} max={4194303} />
@@ -208,7 +208,7 @@ export const NetworkSettings = () => {
                 </Row>
 
                 <Divider />
-                
+
                 <div data-aos="fade-up" data-aos-delay="200">
                     <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
                         Save Network Configuration
@@ -232,7 +232,7 @@ export const UserSettings = () => {
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(10)
 
-    useEffect(() => { 
+    useEffect(() => {
         AOS.refresh()
         loadUsers()
     }, [])
@@ -250,6 +250,7 @@ export const UserSettings = () => {
         }
     }
 
+    // ... (handleAdd, handleEdit, handleDelete, handleSubmit คงเดิม) ...
     const handleAdd = () => {
         setEditingUser(null)
         form.resetFields()
@@ -261,7 +262,7 @@ export const UserSettings = () => {
         form.setFieldsValue({
             ...user,
             is_active: user.is_active ? 'true' : 'false',
-            password: '' 
+            password: ''
         })
         setIsModalOpen(true)
     }
@@ -286,26 +287,26 @@ export const UserSettings = () => {
         try {
             const url = editingUser ? `/users/${editingUser.id}` : '/users'
             const method = editingUser ? 'PUT' : 'POST'
-            
+
             const { confirm_email, ...restValues } = values
-            
+
             const payload = {
                 ...restValues,
                 is_active: values.is_active === 'true' || values.is_active === true
             }
-            
+
             if (editingUser && !payload.password) {
                 delete payload.password
             }
-            
+
             const res = await authFetch(url, {
                 method,
                 body: JSON.stringify(payload)
             })
 
             const data = await res.json()
-            
-            if (res.ok || data.success || data.id || data.username) { 
+
+            if (res.ok || data.success || data.id || data.username) {
                 messageApi.success(editingUser ? 'User updated' : 'User created')
                 setIsModalOpen(false)
                 form.resetFields()
@@ -323,51 +324,83 @@ export const UserSettings = () => {
     }
 
     const columns = [
-        { 
-            title: 'Username', 
-            dataIndex: 'username', 
+        {
+            title: 'Username',
+            dataIndex: 'username',
             key: 'username',
             render: (text: string) => <Text strong>{text}</Text>
         },
-        { 
-            title: 'Role', 
-            dataIndex: 'role', 
-            key: 'role', 
+        {
+            title: 'Role',
+            dataIndex: 'role',
+            key: 'role',
             render: (role: string) => (
-                <Text strong style={{ color: role === 'Admin' ? '#f5222d' : '#1890ff' }}>
+                <Tag color={role === 'Admin' ? 'red' : 'geekblue'}>
                     {role}
-                </Text>
-            ) 
+                </Tag>
+            )
         },
-        { 
-            title: 'Email', 
-            dataIndex: 'email', 
+        // [NEW] เพิ่ม Column Status
+        {
+            title: 'Status',
+            dataIndex: 'is_active',
+            key: 'is_active',
+            align: 'center' as const,
+            render: (isActive: boolean) => (
+                <Tag color={isActive ? 'success' : 'default'}>
+                    {isActive ? 'Active' : 'Inactive'}
+                </Tag>
+            )
+        },
+        {
+            title: 'Email',
+            dataIndex: 'email',
             key: 'email',
             responsive: ['md'] as any,
-            render: (email: string) => email || '-'
+            render: (email: string) => email || <Text type="secondary">-</Text>
         },
-        { 
-            title: 'Last Login', 
-            dataIndex: 'last_login', 
-            key: 'lastLogin', 
+        {
+            title: 'Last Login',
+            dataIndex: 'last_login',
+            key: 'lastLogin',
             responsive: ['lg'] as any,
-            render: (date: string) => date ? new Date(date).toLocaleString('th-TH') : 'Never'
+           render: (date: string) => {
+                if (!date) return <Tag color="default">Never</Tag>
+
+                const dateObj = new Date(date);
+                
+                // แปลงเป็นเวลาไทยด้วย toLocaleString แล้ว parse เอง
+                const thaiTime = dateObj.toLocaleString('en-US', {
+                    timeZone: 'Asia/Bangkok',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                
+                console.log('Thai time:', thaiTime); // ดูว่าได้อะไร
+                
+                return <Text>{thaiTime}</Text>
+            }
         },
-        { 
-            title: 'Action', 
+        {
+            title: 'Action',
             key: 'action',
             width: 150,
             render: (_: any, record: any) => (
                 <Space>
-                    <Button 
-                        size="small" 
-                        onClick={() => handleEdit(record)} 
-                        icon={<EditOutlined />} 
+                    <Button
+                        size="small"
+                        onClick={() => handleEdit(record)}
+                        icon={<EditOutlined />}
                     >
                         Edit
                     </Button>
-                    <Popconfirm 
-                        title="Delete User" 
+                    <Popconfirm
+                        title="Delete User"
                         description="Are you sure?"
                         onConfirm={() => handleDelete(record.id)}
                         okText="Yes"
@@ -376,17 +409,17 @@ export const UserSettings = () => {
                         <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
                     </Popconfirm>
                 </Space>
-            ) 
+            )
         }
     ]
 
     return (
-        <Card 
-            title="User Management" 
+        <Card
+            title="User Management"
             extra={
-                <Button 
-                    type="primary" 
-                    icon={<PlusOutlined />} 
+                <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
                     onClick={handleAdd}
                 >
                     Add User
@@ -394,13 +427,13 @@ export const UserSettings = () => {
             }
         >
             {contextHolder}
-            <Table 
-                dataSource={users} 
-                columns={columns} 
-                rowKey="id" 
+            <Table
+                dataSource={users}
+                columns={columns}
+                rowKey="id"
                 loading={loading}
                 size="middle"
-                pagination={{ 
+                pagination={{
                     current: currentPage,
                     pageSize: pageSize,
                     total: users.length,
@@ -429,16 +462,16 @@ export const UserSettings = () => {
                 destroyOnHidden
             >
                 <Form form={form} layout="vertical" onFinish={handleSubmit}>
-                    <Form.Item 
-                        name="username" 
-                        label="Username" 
+                    <Form.Item
+                        name="username"
+                        label="Username"
                         rules={[{ required: true }]}
                     >
                         <Input prefix={<UserOutlined />} disabled={!!editingUser} />
                     </Form.Item>
 
-                    <Form.Item 
-                        name="password" 
+                    <Form.Item
+                        name="password"
                         label={editingUser ? "New Password (optional)" : "Password"}
                         rules={[{ required: !editingUser }]}
                     >
@@ -453,8 +486,8 @@ export const UserSettings = () => {
                         </Select>
                     </Form.Item>
 
-                    <Form.Item 
-                        name="email" 
+                    <Form.Item
+                        name="email"
                         label="Email"
                         rules={[
                             { type: 'email', message: 'Invalid email' },
@@ -465,8 +498,8 @@ export const UserSettings = () => {
                     </Form.Item>
 
                     {!editingUser && (
-                        <Form.Item 
-                            name="confirm_email" 
+                        <Form.Item
+                            name="confirm_email"
                             label="Confirm Email"
                             dependencies={['email']}
                             rules={[
@@ -485,11 +518,16 @@ export const UserSettings = () => {
                         </Form.Item>
                     )}
 
+                    {/* [UPDATED] Form สำหรับแก้ไข Active Status */}
                     {editingUser && (
                         <Form.Item name="is_active" label="Status">
                             <Select>
-                                <Select.Option value="true">Active</Select.Option>
-                                <Select.Option value="false">Inactive</Select.Option>
+                                <Select.Option value="true">
+                                    <Space><Tag color="success">Active</Tag></Space>
+                                </Select.Option>
+                                <Select.Option value="false">
+                                    <Space><Tag color="default">Inactive</Tag></Space>
+                                </Select.Option>
                             </Select>
                         </Form.Item>
                     )}
@@ -523,7 +561,7 @@ export const DatabaseSettings = () => {
     const [confirmText, setConfirmText] = useState('')
     const [messageApi, contextHolder] = message.useMessage()
 
-    useEffect(() => { 
+    useEffect(() => {
         // Refresh AOS เมื่อโหลดหน้าเสร็จ เพื่อให้อนิเมชั่นทำงาน
         AOS.refresh()
         loadStats()
@@ -571,7 +609,7 @@ export const DatabaseSettings = () => {
             })
 
             const data = await res.json()
-            
+
             if (data.success) {
                 messageApi.success('All data deleted')
                 setIsModalOpen(false)
@@ -593,16 +631,16 @@ export const DatabaseSettings = () => {
             <div data-aos="fade-down">
                 <Title level={5}>System Statistics</Title>
             </div>
-            
+
             <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
                 <Col xs={24} sm={12} md={6}>
                     {/* ใช้ AOS fade-up และ delay เพื่อให้เด้งขึ้นมาทีละอัน */}
                     <div data-aos="fade-up" data-aos-delay="100">
                         <Card size="small">
-                            <Statistic 
-                                title="Total Devices" 
-                                value={stats.totalDevices || 0} 
-                                prefix={<ApiOutlined />} 
+                            <Statistic
+                                title="Total Devices"
+                                value={stats.totalDevices || 0}
+                                prefix={<ApiOutlined />}
                             />
                         </Card>
                     </div>
@@ -610,10 +648,10 @@ export const DatabaseSettings = () => {
                 <Col xs={24} sm={12} md={6}>
                     <div data-aos="fade-up" data-aos-delay="200">
                         <Card size="small">
-                            <Statistic 
-                                title="Total Points" 
-                                value={stats.totalPoints || 0} 
-                                prefix={<DatabaseOutlined />} 
+                            <Statistic
+                                title="Total Points"
+                                value={stats.totalPoints || 0}
+                                prefix={<DatabaseOutlined />}
                             />
                         </Card>
                     </div>
@@ -621,9 +659,9 @@ export const DatabaseSettings = () => {
                 <Col xs={24} sm={12} md={6}>
                     <div data-aos="fade-up" data-aos-delay="300">
                         <Card size="small">
-                            <Statistic 
-                                title="Active Devices" 
-                                value={stats.activeDevices || 0} 
+                            <Statistic
+                                title="Active Devices"
+                                value={stats.activeDevices || 0}
                                 valueStyle={{ color: '#52c41a' }}
                             />
                         </Card>
@@ -632,8 +670,8 @@ export const DatabaseSettings = () => {
                 <Col xs={24} sm={12} md={6}>
                     <div data-aos="fade-up" data-aos-delay="400">
                         <Card size="small">
-                            <Statistic 
-                                title="Database Size" 
+                            <Statistic
+                                title="Database Size"
                                 // ถ้า loading ให้ใส่ค่าว่างไว้ก่อน แล้วให้ formatter จัดการแสดง Spin
                                 value={loading ? " " : (stats.databaseSize || 'N/A')}
                                 formatter={(value) => loading ? <Spin size="small" /> : value}
@@ -651,8 +689,8 @@ export const DatabaseSettings = () => {
                     <Card size="small">
                         <Space direction="vertical" style={{ width: '100%' }}>
                             <Text strong>Optimize Database</Text>
-                            <Button 
-                                icon={<ApiOutlined />} 
+                            <Button
+                                icon={<ApiOutlined />}
                                 onClick={handleOptimize}
                                 loading={loading}
                             >
@@ -667,22 +705,22 @@ export const DatabaseSettings = () => {
 
             <div data-aos="fade-up" data-aos-delay="4000">
                 <Title level={5} type="danger">Danger Zone</Title>
-                <Alert 
-                    message="Factory Reset" 
-                    description="Delete all devices and points permanently" 
-                    type="error" 
-                    showIcon 
+                <Alert
+                    message="Factory Reset"
+                    description="Delete all devices and points permanently"
+                    type="error"
+                    showIcon
                     action={
-                        <Button 
-                            danger 
-                            type="primary" 
+                        <Button
+                            danger
+                            type="primary"
                             icon={<DeleteOutlined />}
                             onClick={() => setIsModalOpen(true)}
                             disabled={loading}
                         >
                             Clear All
                         </Button>
-                    } 
+                    }
                 />
             </div>
 
@@ -712,9 +750,9 @@ export const DatabaseSettings = () => {
                     </Form.Item>
 
                     <Space>
-                        <Button 
-                            danger 
-                            type="primary" 
+                        <Button
+                            danger
+                            type="primary"
                             htmlType="submit"
                             loading={loading}
                             disabled={confirmText !== 'DELETE ALL DATA'}

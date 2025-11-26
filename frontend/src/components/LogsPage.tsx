@@ -14,6 +14,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import AOS from 'aos'
 import dayjs from 'dayjs'
+import * as XLSX from 'xlsx-js-style' 
 import { authFetch } from '../utils/authFetch'
 
 const { Title, Text } = Typography
@@ -68,6 +69,103 @@ export const LogsPage = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // [UPDATED] ปรับปรุงฟังก์ชัน Export (Border All + Wider Details)
+  const handleExport = () => {
+    if (logs.length === 0) {
+      message.warning('No data to export')
+      return
+    }
+
+    const dataToExport = logs.map(log => {
+        let cleanTarget = log.target_name
+        if (cleanTarget && cleanTarget.startsWith('[')) {
+             cleanTarget = cleanTarget.replace('OBJECT_', '').replace(/_/g, ' ')
+        } else if (cleanTarget) {
+             cleanTarget = cleanTarget.replace('OBJECT_', '').replace(/_/g, ' ')
+        }
+
+        return {
+            ID: log.id,
+            Time: dayjs(log.timestamp).format('DD/MM/YYYY HH:mm:ss'),
+            User: log.user_name,
+            Action: log.action_type,
+            Target: cleanTarget,
+            Details: log.details
+        }
+    })
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport)
+
+    // 1. กำหนดความกว้างของคอลัมน์ (ขยาย Details เป็น 100)
+    ws['!cols'] = [
+        { wch: 8 },   // ID
+        { wch: 20 },  // Time
+        { wch: 15 },  // User
+        { wch: 12 },  // Action
+        { wch: 30 },  // Target
+        { wch: 100 }  // Details (กว้างสะใจ)
+    ]
+
+    // 2. วนลูปใส่ Style ให้ทุกเซลล์ (Border All)
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
+    
+    // กำหนด Border Style แบบใช้ซ้ำ
+    const borderStyle = {
+        top: { style: 'thin', color: { rgb: "000000" } },
+        bottom: { style: 'thin', color: { rgb: "000000" } },
+        left: { style: 'thin', color: { rgb: "000000" } },
+        right: { style: 'thin', color: { rgb: "000000" } }
+    }
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const address = XLSX.utils.encode_cell({ r: R, c: C })
+            if (!ws[address]) continue
+
+            if (R === 0) {
+                // --- สไตล์ Header ---
+                ws[address].s = {
+                    font: {
+                        name: 'Arial',
+                        sz: 11,
+                        bold: true,
+                        color: { rgb: "FFFFFF" } // ตัวหนังสือขาว
+                    },
+                    fill: {
+                        fgColor: { rgb: "1890FF" } // พื้นหลังน้ำเงิน
+                    },
+                    alignment: {
+                        horizontal: "center",
+                        vertical: "center"
+                    },
+                    border: borderStyle // ใส่ขอบ
+                }
+            } else {
+                // --- สไตล์ Data ---
+                ws[address].s = {
+                    font: {
+                        name: 'Arial',
+                        sz: 10
+                    },
+                    alignment: {
+                        vertical: "center", // จัดกึ่งกลางแนวตั้ง
+                        wrapText: true,     // ตัดบรรทัดถ้ายาวเกิน
+                        horizontal: "left"
+                    },
+                    border: borderStyle // ใส่ขอบ
+                }
+            }
+        }
+    }
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Audit Logs")
+
+    const fileName = `AuditLogs_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`
+    XLSX.writeFile(wb, fileName)
+    message.success(`Exported ${logs.length} rows successfully`)
   }
 
   const formatTargetName = (name: string) => {
@@ -222,7 +320,7 @@ export const LogsPage = () => {
                             <Button type="primary" icon={<SearchOutlined />} onClick={fetchLogs} loading={loading}>
                                 Search
                             </Button>
-                            <Button icon={<DownloadOutlined />}>
+                            <Button icon={<DownloadOutlined />} onClick={handleExport}>
                                 Export
                             </Button>
                         </Space>
