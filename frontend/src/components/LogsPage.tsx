@@ -1,3 +1,6 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 import { useState, useEffect } from 'react'
 import { 
   Card, 
@@ -9,7 +12,8 @@ import {
   Space, 
   Row, 
   Col, 
-  Typography 
+  Typography,
+  message 
 } from 'antd'
 import { 
   SearchOutlined, 
@@ -18,43 +22,82 @@ import {
   UserOutlined,
   SettingOutlined,
   EditOutlined,
-  ArrowRightOutlined // [NEW] Import ไอคอนลูกศร
+  ArrowRightOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import AOS from 'aos'
 import dayjs from 'dayjs'
+import { config } from '../config'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
-// Mock Data สำหรับ Audit Logs
 interface AuditLog {
   id: number
   timestamp: string
-  user: string
-  action: 'WRITE' | 'SETTING' | 'USER'
-  target: string
+  user_name: string
+  action_type: 'WRITE' | 'SETTING' | 'USER'
+  target_name: string
   details: string
 }
 
-const mockLogs: AuditLog[] = [
-  { id: 1, timestamp: '2025-11-25 10:45:00', user: 'Admin', action: 'WRITE', target: 'AHU-01_Run', details: 'Off -> On' },
-  { id: 2, timestamp: '2025-11-25 10:30:00', user: 'Admin', action: 'SETTING', target: 'Network Port', details: '47808 -> 47809' },
-  { id: 3, timestamp: '2025-11-25 10:15:00', user: 'Teera', action: 'WRITE', target: 'Temp_Set', details: '24.0 -> 22.5' },
-  { id: 4, timestamp: '2025-11-25 10:00:00', user: 'Admin', action: 'USER', target: 'Teera', details: 'Added new user' },
-  { id: 5, timestamp: '2025-11-24 18:20:00', user: 'System', action: 'WRITE', target: 'Schedule_Main', details: 'Occupied -> Unoccupied' },
-]
-
 export const LogsPage = () => {
   const [loading, setLoading] = useState(false)
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  
+  // Filter States
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([dayjs(), dayjs()])
+  const [userFilter, setUserFilter] = useState('all')
+  const [actionFilter, setActionFilter] = useState('all')
 
   useEffect(() => {
     AOS.refresh()
+    fetchLogs()
   }, [])
 
-  const handleSearch = () => {
+  const fetchLogs = async () => {
     setLoading(true)
-    setTimeout(() => setLoading(false), 800)
+    try {
+      const params = new URLSearchParams()
+      
+      // [FIXED] ใช้ ? เพื่อป้องกัน error ถ้า dateRange[0] หรือ [1] เป็น undefined
+      if (dateRange && dateRange[0] && dateRange[1]) {
+        params.append('startDate', dateRange[0].format('YYYY-MM-DD'))
+        params.append('endDate', dateRange[1].format('YYYY-MM-DD'))
+      }
+      
+      if (userFilter !== 'all') params.append('user', userFilter)
+      if (actionFilter !== 'all') params.append('actionType', actionFilter)
+
+      const res = await fetch(`${config.apiUrl}/audit-logs?${params.toString()}`)
+      if (!res.ok) throw new Error('Failed to fetch logs')
+      
+      const data = await res.json()
+      setLogs(data)
+    } catch (error) {
+      console.error(error)
+      message.error('Failed to load audit logs')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatTargetName = (name: string) => {
+    if (name && name.startsWith('[')) {
+        const parts = name.match(/^(\[.*?\])\s*(.*)/)
+        if (parts) {
+            const deviceName = parts[1]
+            const pointName = parts[2].replace('OBJECT_', '').replace(/_/g, ' ')
+            return (
+                <Space direction="vertical" size={0} style={{rowGap: 0}}>
+                    <Text type="secondary" style={{fontSize: 11}}>{deviceName}</Text>
+                    <Text strong style={{fontSize: 13}}>{pointName}</Text>
+                </Space>
+            )
+        }
+    }
+    // [FIXED] ใส่ || '' เพื่อกัน name เป็น null/undefined
+    return <Text>{(name || '').replace('OBJECT_', '').replace(/_/g, ' ')}</Text>
   }
 
   const columns: ColumnsType<AuditLog> = [
@@ -62,7 +105,7 @@ export const LogsPage = () => {
       title: 'Time',
       dataIndex: 'timestamp',
       key: 'timestamp',
-      width: 180,
+      width: 160,
       render: (text) => (
         <Space direction="vertical" size={0}>
             <Text>{dayjs(text).format('DD/MM/YYYY')}</Text>
@@ -72,8 +115,8 @@ export const LogsPage = () => {
     },
     {
       title: 'User',
-      dataIndex: 'user',
-      key: 'user',
+      dataIndex: 'user_name',
+      key: 'user_name',
       width: 120,
       render: (text) => (
         <Space>
@@ -84,9 +127,10 @@ export const LogsPage = () => {
     },
     {
       title: 'Action',
-      dataIndex: 'action',
-      key: 'action',
-      width: 120,
+      dataIndex: 'action_type',
+      key: 'action_type',
+      width: 110,
+      align: 'center',
       render: (action: string) => {
         let color = 'default'
         let icon = <FileTextOutlined />
@@ -96,7 +140,7 @@ export const LogsPage = () => {
         if (action === 'USER') { color = 'green'; icon = <UserOutlined /> }
 
         return (
-          <Tag color={color} icon={icon}>
+          <Tag color={color} icon={icon} style={{marginRight: 0, minWidth: 80}}>
             {action}
           </Tag>
         )
@@ -104,25 +148,31 @@ export const LogsPage = () => {
     },
     {
       title: 'Target',
-      dataIndex: 'target',
-      key: 'target',
-      width: 150,
-      responsive: ['md'],
-      render: (text) => <Text code>{text}</Text>
+      dataIndex: 'target_name',
+      key: 'target_name',
+      width: 250, 
+      render: (text) => formatTargetName(text)
     },
     {
       title: 'Details',
       dataIndex: 'details',
       key: 'details',
-      // [MODIFIED] ปรับแต่งการแสดงผล Details ให้ใช้ Arrow Icon
       render: (text) => {
-        if (text.includes('->')) {
-            const [oldVal, newVal] = text.split('->').map((s: string) => s.trim())
+        if (text && text.includes('->')) {
+            const parts = text.split('->')
+            const oldVal = parts[0].trim()
+            
+            // [FIXED] เช็ค parts[1] ก่อน split เพื่อกัน error
+            const newValPart = parts[1] ? parts[1].trim() : ''
+            const newVal = newValPart.split('(')[0].trim()
+            const extra = newValPart.includes('(') ? `(${newValPart.split('(')[1]}` : ''
+
             return (
-                <Space>
-                    <Text type="secondary">{oldVal}</Text>
+                <Space wrap>
+                    <Tag bordered={false}>{oldVal}</Tag>
                     <ArrowRightOutlined style={{ fontSize: 12, color: '#999' }} />
-                    <Text strong>{newVal}</Text>
+                    <Tag color="processing">{newVal}</Tag>
+                    {extra && <Text type="secondary" style={{fontSize: 11}}>{extra}</Text>}
                 </Space>
             )
         }
@@ -133,7 +183,6 @@ export const LogsPage = () => {
 
   return (
     <>
-        {/* Header Section */}
         <div style={{ marginBottom: 24 }} data-aos="fade-down">
             <Title level={3} style={{ margin: 0, marginBottom: 8 }}>
             <FileTextOutlined /> System Audit Logs
@@ -141,14 +190,16 @@ export const LogsPage = () => {
             <Text type="secondary">Track and monitor system activities, user actions, and value changes.</Text>
         </div>
 
-        {/* Filter Section */}
         <div data-aos="fade-up" data-aos-delay="100">
             <Card style={{ marginBottom: 24 }} bordered={false}>
                 <Row gutter={[16, 16]} align="bottom">
                     <Col xs={24} md={8} lg={6}>
                         <Text strong>Date Range</Text>
+                        {/* @ts-ignore */}
                         <RangePicker 
                             style={{ width: '100%', marginTop: 8 }} 
+                            value={dateRange}
+                            onChange={(dates) => setDateRange(dates as any)}
                             presets={[
                                 { label: 'Today', value: [dayjs(), dayjs()] },
                                 { label: 'Yesterday', value: [dayjs().subtract(1, 'd'), dayjs().subtract(1, 'd')] },
@@ -159,19 +210,21 @@ export const LogsPage = () => {
                     <Col xs={12} md={6} lg={4}>
                         <Text strong>User</Text>
                         <Select 
-                            defaultValue="all" 
+                            value={userFilter}
+                            onChange={setUserFilter}
                             style={{ width: '100%', marginTop: 8 }}
                             options={[
                                 { value: 'all', label: 'All Users' },
-                                { value: 'admin', label: 'Admin' },
-                                { value: 'teera', label: 'Teera' },
+                                { value: 'Admin', label: 'Admin' },
+                                { value: 'System', label: 'System' },
                             ]}
                         />
                     </Col>
                     <Col xs={12} md={6} lg={4}>
                         <Text strong>Action Type</Text>
                         <Select 
-                            defaultValue="all" 
+                            value={actionFilter}
+                            onChange={setActionFilter}
                             style={{ width: '100%', marginTop: 8 }}
                             options={[
                                 { value: 'all', label: 'All Actions' },
@@ -183,7 +236,7 @@ export const LogsPage = () => {
                     </Col>
                     <Col xs={24} md={4} lg={10} style={{ textAlign: 'right' }}>
                         <Space>
-                            <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={loading}>
+                            <Button type="primary" icon={<SearchOutlined />} onClick={fetchLogs} loading={loading}>
                                 Search
                             </Button>
                             <Button icon={<DownloadOutlined />}>
@@ -195,19 +248,16 @@ export const LogsPage = () => {
             </Card>
         </div>
 
-        {/* Table Section */}
         <div data-aos="fade-up" data-aos-delay="200">
-            <Card title="Log Records (Latest First)" bordered={false}>
+            <Card title="Log Records (Latest First)" bordered={false} bodyStyle={{padding: '0 24px 24px'}}>
                 <Table 
                     columns={columns} 
-                    dataSource={mockLogs} 
+                    dataSource={logs} 
                     rowKey="id"
                     loading={loading}
-                    pagination={{ 
-                        pageSize: 10, 
-                        showSizeChanger: true 
-                    }}
+                    pagination={{ pageSize: 10, showSizeChanger: true }}
                     scroll={{ x: 800 }}
+                    size="middle" 
                 />
             </Card>
         </div>

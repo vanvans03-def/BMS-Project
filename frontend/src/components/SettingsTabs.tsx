@@ -5,12 +5,13 @@ import { useState, useEffect } from 'react'
 import {
     Form, Input, InputNumber, Button, Card,
     Alert, Table, Space, Popconfirm, Statistic,
-    Row, Col, message, Typography, Divider, Modal, Select
+    Row, Col, message, Typography, Divider, Modal, Select, Tag
 } from 'antd'
 import {
     SaveOutlined, ApiOutlined, DatabaseOutlined,
     PlusOutlined, GlobalOutlined, DeleteOutlined,
-    UserOutlined
+    UserOutlined, ReloadOutlined, ExclamationCircleOutlined,
+    MailOutlined, EditOutlined // Add EditOutlined
 } from '@ant-design/icons'
 import { config } from '../config'
 import AOS from 'aos'
@@ -264,7 +265,9 @@ export const UserSettings = () => {
         setEditingUser(user)
         form.setFieldsValue({
             ...user,
-            is_active: user.is_active ? 'true' : 'false'
+            is_active: user.is_active ? 'true' : 'false',
+            // Don't fill password for editing
+            password: '' 
         })
         setIsModalOpen(true)
     }
@@ -293,10 +296,18 @@ export const UserSettings = () => {
             
             const method = editingUser ? 'PUT' : 'POST'
             
-            // แปลง is_active จาก string เป็น boolean
+            // Clean up values
+            const { confirm_email, ...restValues } = values
+            
+            // Transform is_active to boolean
             const payload = {
-                ...values,
+                ...restValues,
                 is_active: values.is_active === 'true' || values.is_active === true
+            }
+            
+            // Don't send empty password when editing
+            if (editingUser && !payload.password) {
+                delete payload.password
             }
             
             const res = await fetch(url, {
@@ -307,16 +318,29 @@ export const UserSettings = () => {
 
             const data = await res.json()
             
-            if (data.success) {
+            // [FIXED] Check for both success flags or if an ID/username is returned (successful creation)
+            // This handles cases where backend might return the created object but not an explicit success:true flag
+            if (res.ok || data.success || data.id || data.username) { 
                 messageApi.success(editingUser ? 'User updated' : 'User created')
                 setIsModalOpen(false)
                 form.resetFields()
                 loadUsers()
             } else {
-                messageApi.error('Operation failed')
+                // If backend sends a specific message, use it, otherwise generic error
+                const errorMsg = data.message || 'Operation failed'
+                // Filter out known non-critical errors if needed, or just show warning
+                if (errorMsg.includes('audit log')) {
+                     messageApi.warning('User saved but log recording failed')
+                     setIsModalOpen(false)
+                     form.resetFields()
+                     loadUsers()
+                } else {
+                     messageApi.error(errorMsg)
+                }
             }
         } catch (err) {
-            messageApi.error('Failed to save user')
+            console.error('Save user error:', err)
+            messageApi.error('Failed to save user. Check console for details.')
         } finally {
             setLoading(false)
         }
@@ -359,7 +383,13 @@ export const UserSettings = () => {
             width: 150,
             render: (_: any, record: any) => (
                 <Space>
-                    <Button size="small" onClick={() => handleEdit(record)}>Edit</Button>
+                    <Button 
+                        size="small" 
+                        onClick={() => handleEdit(record)} 
+                        icon={<EditOutlined />} // [ADDED] Added Edit icon back
+                    >
+                        Edit
+                    </Button>
                     <Popconfirm 
                         title="Delete User" 
                         description="Are you sure you want to delete this user?"
@@ -367,10 +397,10 @@ export const UserSettings = () => {
                         okText="Yes"
                         cancelText="No"
                     >
-                        <Button size="small" danger>Delete</Button>
+                        <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
                     </Popconfirm>
                 </Space>
-            )
+            ) 
         }
     ]
 
@@ -396,17 +426,12 @@ export const UserSettings = () => {
                     columns={columns} 
                     rowKey="id" 
                     loading={loading}
-                    pagination={{ 
-                        defaultPageSize: 10,
-                        pageSizeOptions: ['10', '20', '50'],
-                        showSizeChanger: true,
-                        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} users`
-                    }}
+                    pagination={{ pageSize: 10 }}
                     scroll={{ x: 600 }} 
                 />
             </div>
 
-            {/* Modal สำหรับเพิ่ม/แก้ไข User */}
+            {/* Modal for Add/Edit User */}
             <Modal
                 title={editingUser ? 'Edit User' : 'Add New User'}
                 open={isModalOpen}
@@ -426,15 +451,14 @@ export const UserSettings = () => {
                         <Input prefix={<UserOutlined />} disabled={!!editingUser} />
                     </Form.Item>
 
-                    {!editingUser && (
-                        <Form.Item 
-                            name="password" 
-                            label="Password" 
-                            rules={[{ required: true, message: 'Please enter password' }]}
-                        >
-                            <Input.Password />
-                        </Form.Item>
-                    )}
+                    {/* Show password field if adding new user OR explicitly wanting to change it (could add a checkbox logic for cleaner UI, but keeping simple) */}
+                    <Form.Item 
+                        name="password" 
+                        label={editingUser ? "New Password (leave empty to keep current)" : "Password"}
+                        rules={[{ required: !editingUser, message: 'Please enter password' }]}
+                    >
+                        <Input.Password />
+                    </Form.Item>
 
                     <Form.Item 
                         name="role" 
@@ -448,9 +472,40 @@ export const UserSettings = () => {
                         </Select>
                     </Form.Item>
 
-                    <Form.Item name="email" label="Email">
-                        <Input type="email" />
+                    {/* [ADDED] Email Field with Validation */}
+                    <Form.Item 
+                        name="email" 
+                        label="Email"
+                        rules={[
+                            { type: 'email', message: 'The input is not valid E-mail!' },
+                            { required: true, message: 'Please input your E-mail!' }
+                        ]}
+                    >
+                        <Input prefix={<MailOutlined />} placeholder="user@example.com" />
                     </Form.Item>
+
+                    {/* [ADDED] Confirm Email Field */}
+                    {!editingUser && (
+                        <Form.Item 
+                            name="confirm_email" 
+                            label="Confirm Email"
+                            dependencies={['email']}
+                            hasFeedback
+                            rules={[
+                                { required: true, message: 'Please confirm your E-mail!' },
+                                ({ getFieldValue }) => ({
+                                    validator(_, value) {
+                                        if (!value || getFieldValue('email') === value) {
+                                            return Promise.resolve();
+                                        }
+                                        return Promise.reject(new Error('The two emails that you entered do not match!'));
+                                    },
+                                }),
+                            ]}
+                        >
+                            <Input prefix={<MailOutlined />} placeholder="Confirm Email" />
+                        </Form.Item>
+                    )}
 
                     {editingUser && (
                         <Form.Item name="is_active" label="Status">
@@ -657,7 +712,7 @@ export const DatabaseSettings = () => {
 
             <Divider />
 
-            <div data-aos="fade-up" data-aos-delay="200">
+            <div data-aos="fade-up" data-aos-delay="100">
                 <Title level={5} type="danger">Danger Zone</Title>
                 <Alert 
                     message="Factory Reset" 

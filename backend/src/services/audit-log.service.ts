@@ -65,11 +65,13 @@ export const auditLogService = {
       ? sql`WHERE ${conditions.reduce((a, b) => sql`${a} AND ${b}`)}` 
       : sql``
 
-    return await sql`
+    const result = await sql`
       SELECT * FROM audit_logs 
       ${whereClause}
       ORDER BY timestamp DESC 
       LIMIT 100
     `
+
+    return [...result]
   }
 }
