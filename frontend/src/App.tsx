@@ -58,6 +58,10 @@ import { LogsPage } from "./components/LogsPage"
 import AOS from "aos"
 import "aos/dist/aos.css"
 
+import { LoginPage } from "./components/LoginPage"
+import { LogoutOutlined } from "@ant-design/icons"
+
+
 const { Header, Content, Sider } = Layout
 const { Title, Text } = Typography
 
