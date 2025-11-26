@@ -80,7 +80,7 @@ export const DiscoveryModal = ({
       onCancel={onClose}
       width={700}
       centered
-      destroyOnClose={false}
+      destroyOnHidden={false}
       maskClosable={false}
       footer={
         loading ? null : showContent ? [

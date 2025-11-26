@@ -68,7 +68,7 @@ export const GeneralSettings = () => {
     }
 
     return (
-        <Card bordered={false}>
+        <Card>
             {contextHolder}
             <div data-aos="fade-up">
                 <Form 
@@ -162,7 +162,7 @@ export const NetworkSettings = () => {
     }
 
     return (
-        <Card bordered={false}>
+        <Card>
             {contextHolder}
             <div data-aos="fade-up">
                 <Alert
@@ -406,7 +406,6 @@ export const UserSettings = () => {
 
     return (
         <Card 
-            bordered={false} 
             title="User Management" 
             extra={
                 <Button 
@@ -440,7 +439,7 @@ export const UserSettings = () => {
                     form.resetFields()
                 }}
                 footer={null}
-                destroyOnClose
+                destroyOnHidden
             >
                 <Form form={form} layout="vertical" onFinish={handleSubmit}>
                     <Form.Item 
@@ -610,7 +609,7 @@ export const DatabaseSettings = () => {
     }
 
     return (
-        <Card bordered={false}>
+        <Card>
             {contextHolder}
             <div data-aos="fade-up">
                 <Title level={5}>System Statistics</Title>
@@ -741,7 +740,7 @@ export const DatabaseSettings = () => {
                     setConfirmText('')
                 }}
                 footer={null}
-                destroyOnClose
+                destroyOnHidden
             >
                 <Alert
                     message="This action cannot be undone!"
