@@ -229,6 +229,7 @@ export const NetworkSettings = () => {
 // ================================
 // 3. USER SETTINGS (Connected)
 // ================================
+
 export const UserSettings = () => {
     const [users, setUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
@@ -236,6 +237,10 @@ export const UserSettings = () => {
     const [editingUser, setEditingUser] = useState<any>(null)
     const [form] = Form.useForm()
     const [messageApi, contextHolder] = message.useMessage()
+
+    // [Pagination State] - เพิ่มส่วนนี้เพื่อให้เหมือน LogsPage
+    const [currentPage, setCurrentPage] = useState(1)
+    const [pageSize, setPageSize] = useState(10)
 
     useEffect(() => { 
         AOS.refresh()
@@ -266,7 +271,6 @@ export const UserSettings = () => {
         form.setFieldsValue({
             ...user,
             is_active: user.is_active ? 'true' : 'false',
-            // Don't fill password for editing
             password: '' 
         })
         setIsModalOpen(true)
@@ -296,16 +300,13 @@ export const UserSettings = () => {
             
             const method = editingUser ? 'PUT' : 'POST'
             
-            // Clean up values
             const { confirm_email, ...restValues } = values
             
-            // Transform is_active to boolean
             const payload = {
                 ...restValues,
                 is_active: values.is_active === 'true' || values.is_active === true
             }
             
-            // Don't send empty password when editing
             if (editingUser && !payload.password) {
                 delete payload.password
             }
@@ -318,17 +319,13 @@ export const UserSettings = () => {
 
             const data = await res.json()
             
-            // [FIXED] Check for both success flags or if an ID/username is returned (successful creation)
-            // This handles cases where backend might return the created object but not an explicit success:true flag
             if (res.ok || data.success || data.id || data.username) { 
                 messageApi.success(editingUser ? 'User updated' : 'User created')
                 setIsModalOpen(false)
                 form.resetFields()
                 loadUsers()
             } else {
-                // If backend sends a specific message, use it, otherwise generic error
                 const errorMsg = data.message || 'Operation failed'
-                // Filter out known non-critical errors if needed, or just show warning
                 if (errorMsg.includes('audit log')) {
                      messageApi.warning('User saved but log recording failed')
                      setIsModalOpen(false)
@@ -386,7 +383,7 @@ export const UserSettings = () => {
                     <Button 
                         size="small" 
                         onClick={() => handleEdit(record)} 
-                        icon={<EditOutlined />} // [ADDED] Added Edit icon back
+                        icon={<EditOutlined />} 
                     >
                         Edit
                     </Button>
@@ -425,7 +422,25 @@ export const UserSettings = () => {
                     columns={columns} 
                     rowKey="id" 
                     loading={loading}
-                    pagination={{ pageSize: 10 }}
+                    // [UPDATED] ใช้ size="middle" ให้เหมือนหน้า Logs
+                    size="middle"
+                    // [UPDATED] Pagination Config แบบเดียวกับหน้า Logs เป๊ะๆ
+                    pagination={{ 
+                        current: currentPage,
+                        pageSize: pageSize,
+                        total: users.length,
+                        showSizeChanger: true,
+                        showQuickJumper: true, // จะแสดงช่อง Go to เมื่อมีหลายหน้า
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} users`,
+                        onChange: (page, newPageSize) => {
+                            setCurrentPage(page)
+                            if (newPageSize !== pageSize) {
+                                setPageSize(newPageSize)
+                                setCurrentPage(1) // รีเซ็ตกลับหน้า 1 เมื่อเปลี่ยนขนาด
+                            }
+                        }
+                    }}
                     scroll={{ x: 600 }} 
                 />
             </div>
@@ -450,7 +465,6 @@ export const UserSettings = () => {
                         <Input prefix={<UserOutlined />} disabled={!!editingUser} />
                     </Form.Item>
 
-                    {/* Show password field if adding new user OR explicitly wanting to change it (could add a checkbox logic for cleaner UI, but keeping simple) */}
                     <Form.Item 
                         name="password" 
                         label={editingUser ? "New Password (leave empty to keep current)" : "Password"}
@@ -471,7 +485,6 @@ export const UserSettings = () => {
                         </Select>
                     </Form.Item>
 
-                    {/* [ADDED] Email Field with Validation */}
                     <Form.Item 
                         name="email" 
                         label="Email"
@@ -483,7 +496,6 @@ export const UserSettings = () => {
                         <Input prefix={<MailOutlined />} placeholder="user@example.com" />
                     </Form.Item>
 
-                    {/* [ADDED] Confirm Email Field */}
                     {!editingUser && (
                         <Form.Item 
                             name="confirm_email" 

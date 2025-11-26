@@ -1,6 +1,7 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { Table, Button, Badge, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react' // [UPDATED] เพิ่ม useState
 import AOS from 'aos'
 
 const { Text } = Typography
@@ -22,40 +23,37 @@ interface DeviceTableProps {
 }
 
 export const DeviceTable = ({ devices, loading, onViewDevice, searchText }: DeviceTableProps) => {
+  // [UPDATED] เพิ่ม State สำหรับ Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+
   useEffect(() => {
     AOS.refresh()
   }, [devices])
 
-  // Logic การกรองข้อมูล (Search Filter) - ค้นหาทุกคอลัมน์
+  // Logic การกรองข้อมูล (Search Filter)
   const filteredDevices = useMemo(() => {
     if (!searchText || searchText.trim() === '') {
-      return devices // ถ้าไม่มีข้อความค้นหา ให้แสดงทั้งหมด
+      return devices
     }
 
     const lowerSearch = searchText.toLowerCase().trim()
 
     return devices.filter(device => {
-      // ค้นหาใน: Status (Online), Device Name, Instance ID, IP Address, Network Number
-      
-      // 1. Status - ค้นหาคำว่า "online"
       const statusMatch = 'online'.includes(lowerSearch)
-      
-      // 2. Device Name
       const nameMatch = device.device_name?.toLowerCase().includes(lowerSearch)
-      
-      // 3. Instance ID (แปลงเป็น string ก่อนเช็ค)
       const instanceMatch = device.device_instance_id?.toString().includes(lowerSearch)
-      
-      // 4. IP Address
       const ipMatch = device.ip_address?.toLowerCase().includes(lowerSearch)
-      
-      // 5. Network Number (ถ้ามี)
       const networkMatch = device.network_number?.toString().includes(lowerSearch)
 
-      // ถ้าตรงกับคอลัมน์ใดคอลัมน์หนึ่ง ให้แสดงผล
       return statusMatch || nameMatch || instanceMatch || ipMatch || networkMatch
     })
   }, [devices, searchText])
+
+  // [UPDATED] รีเซ็ตหน้าเมื่อมีการค้นหา
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchText])
 
   const columns: ColumnsType<Device> = [
     {
@@ -109,14 +107,25 @@ export const DeviceTable = ({ devices, loading, onViewDevice, searchText }: Devi
   return (
     <Table
       columns={columns}
-      dataSource={filteredDevices} // ใช้ข้อมูลที่กรองแล้ว
+      dataSource={filteredDevices}
       loading={loading}
       rowKey="id"
+      // [UPDATED] ใช้ Pagination รูปแบบเดียวกับ LogsPage
       pagination={{ 
-        defaultPageSize: 10,
-        pageSizeOptions: ['10', '20', '50', '100'],
+        current: currentPage,
+        pageSize: pageSize,
+        total: filteredDevices.length,
         showSizeChanger: true,
-        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} devices`
+        showQuickJumper: true,
+        pageSizeOptions: ['10', '20', '50', '100'],
+        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} devices`,
+        onChange: (page, newPageSize) => {
+          setCurrentPage(page)
+          if (newPageSize !== pageSize) {
+            setPageSize(newPageSize)
+            setCurrentPage(1) // รีเซ็ตกลับหน้าแรกเมื่อเปลี่ยนขนาดหน้า
+          }
+        }
       }}
       scroll={{ x: 800 }}
     />

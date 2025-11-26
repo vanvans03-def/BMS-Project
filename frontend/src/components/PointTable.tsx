@@ -17,6 +17,7 @@ import { AnimatedNumber } from "./AnimatedNumber"
 
 const { Text } = Typography
 
+// ... (Interfaces คงเดิม) ...
 interface Point {
   id: number
   device_id: number
@@ -43,6 +44,10 @@ interface PointTableProps {
 export const PointTable = ({ points, pointValues, loading, onWritePoint }: PointTableProps) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
+  
+  // [UPDATED] เพิ่ม State สำหรับ Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     const newUpdated = new Set<number>()
@@ -62,6 +67,7 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint }: Point
     }
   }, [pointValues])
 
+  // ... (Functions formatValue, getValueColor คงเดิม) ...
   const formatValue = (value: any, objectType: string): string => {
     if (value === null || value === undefined) return "-"
 
@@ -86,6 +92,7 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint }: Point
     return "#1890ff"
   }
 
+  // ... (Columns คงเดิม) ...
   const columns: ColumnsType<Point> = [
     {
       title: "Object Type",
@@ -246,11 +253,22 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint }: Point
       dataSource={points}
       loading={loading}
       rowKey="id"
+      // [UPDATED] ใช้ Pagination รูปแบบเดียวกับ LogsPage
       pagination={{ 
-        defaultPageSize: 10,
-        pageSizeOptions: ['10', '20', '50', '100'],
+        current: currentPage,
+        pageSize: pageSize,
+        total: points.length,
         showSizeChanger: true,
-        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} points`
+        showQuickJumper: true,
+        pageSizeOptions: ['10', '20', '50', '100'],
+        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} points`,
+        onChange: (page, newPageSize) => {
+          setCurrentPage(page)
+          if (newPageSize !== pageSize) {
+            setPageSize(newPageSize)
+            setCurrentPage(1)
+          }
+        }
       }}
       scroll={{ x: 1000 }}
       rowClassName={() => "fade-in-row"}
