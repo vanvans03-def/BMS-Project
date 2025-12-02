@@ -1,24 +1,17 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/set-state-in-effect */
 import { Table, Tag, Button, Typography, Badge } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { EditOutlined, ThunderboltOutlined, NumberOutlined } from '@ant-design/icons'
-import { AnimatedNumber } from './AnimatedNumber'
+import { AnimatedNumber } from '../../components/AnimatedNumber'
+
+// [UPDATED] Import Type กลาง
+import type { Point, PointValue } from '../../types/common'
 
 const { Text } = Typography
 
-interface Point {
-  id: number
-  point_name: string
-  register_type: string // COIL, HOLDING_REGISTER
-  object_instance: number // Address
-  data_type?: string
-}
-
-interface PointValue {
-  value: any
-  status: string
-  timestamp: string
-}
+// [REMOVED] ลบ interface Point ภายในทิ้ง
+// interface Point { ... }
+// interface PointValue { ... }
 
 interface Props {
   points: Point[]
@@ -35,13 +28,15 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite }: Prop
       dataIndex: 'register_type',
       key: 'type',
       width: 150,
-      render: (type) => {
+      render: (type: string | undefined) => { // [UPDATED] รองรับ undefined
         let color = 'default'
         let icon = <NumberOutlined />
+        
+        // ตรวจสอบค่า type ก่อนใช้งาน
         if (type === 'COIL') { color = 'green'; icon = <ThunderboltOutlined /> }
         if (type === 'HOLDING_REGISTER') { color = 'blue'; icon = <NumberOutlined /> }
         
-        return <Tag color={color} icon={icon}>{type}</Tag>
+        return <Tag color={color} icon={icon}>{type ?? 'UNKNOWN'}</Tag>
       }
     },
     {
@@ -65,6 +60,7 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite }: Prop
         const data = pointValues.get(record.id)
         if (!data) return <Badge status="default" text="-" />
 
+        // [UPDATED] ใช้ optional chaining หรือตรวจสอบค่าก่อน
         if (record.register_type === 'COIL') {
            const isOn = data.value === true || data.value === 1 || data.value === 'true'
            return (

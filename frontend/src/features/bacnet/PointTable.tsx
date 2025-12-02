@@ -13,7 +13,7 @@ import {
   ClockCircleOutlined,
 } from "@ant-design/icons"
 import { useEffect, useRef, useState } from "react"
-import { AnimatedNumber } from "./AnimatedNumber"
+import { AnimatedNumber } from "../../components/AnimatedNumber"
 
 const { Text } = Typography
 

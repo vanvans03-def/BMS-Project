@@ -1,0 +1,141 @@
+import React, { useState } from 'react';
+import { Layout, Menu, Button, Space, Typography, Dropdown, Avatar, Divider, theme } from 'antd';
+import {
+  AppstoreOutlined, SettingOutlined, FileTextOutlined,
+  ArrowLeftOutlined, UserOutlined, LogoutOutlined, DownOutlined
+} from '@ant-design/icons';
+import { useAuth } from '../../contexts/AuthContext';
+
+const { Header, Content, Sider } = Layout;
+const { Title, Text } = Typography;
+
+interface DashboardLayoutProps {
+  title: string;
+  headerIcon: React.ReactNode;
+  themeColor: string;
+  onBack: () => void;
+  currentView: string;
+  onMenuClick: (key: string) => void;
+  children: React.ReactNode;
+  // [UPDATED] เพิ่ม onProfileClick เข้าไปใน Interface (เป็น Optional ก็ได้)
+  onProfileClick?: () => void;
+}
+
+export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
+  title,
+  headerIcon,
+  themeColor,
+  onBack,
+  currentView,
+  onMenuClick,
+  children,
+  onProfileClick // [UPDATED] รับ prop เข้ามา
+}) => {
+  const { user, logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
+  const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
+
+  const userMenu = {
+    items: [
+      {
+        key: 'profile',
+        icon: <UserOutlined />,
+        label: 'Profile',
+        // [UPDATED] เรียกใช้ function ที่รับมา
+        onClick: onProfileClick 
+      },
+      {
+        type: 'divider' as const,
+      },
+      {
+        key: 'logout',
+        icon: <LogoutOutlined />,
+        label: 'Logout',
+        danger: true,
+        onClick: logout
+      }
+    ]
+  };
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 16px',
+          background: '#001529',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1000,
+        }}
+      >
+        <Space style={{ cursor: 'pointer', marginRight: 16 }} onClick={onBack}>
+          <ArrowLeftOutlined style={{ color: 'white', fontSize: 18 }} />
+          <Text style={{ color: 'white', fontSize: 16, fontWeight: 600 }}>Portal</Text>
+        </Space>
+
+        <Divider type="vertical" style={{ background: 'rgba(255,255,255,0.2)', margin: '0 16px' }} />
+
+        <div style={{ fontSize: 24, marginRight: 12, color: themeColor, display: 'flex', alignItems: 'center' }}>
+            {headerIcon}
+        </div>
+        <Title level={4} style={{ margin: 0, color: 'white' }}>
+          {title}
+        </Title>
+
+        <div style={{ flex: 1 }} />
+
+        <Space>
+          <Dropdown menu={userMenu} placement="bottomRight" trigger={['click']}>
+            <Button type="text" style={{ color: 'white', height: 'auto', padding: '4px 12px' }}>
+              <Space>
+                <Avatar style={{ backgroundColor: themeColor }} icon={<UserOutlined />} />
+                <Text style={{ color: "white", display: window.innerWidth > 768 ? "inline" : "none" }}>
+                  {user?.username || 'User'}
+                </Text>
+                <DownOutlined style={{ fontSize: 12 }} />
+              </Space>
+            </Button>
+          </Dropdown>
+        </Space>
+      </Header>
+
+      <Layout>
+        <Sider
+          collapsible
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
+          theme="light"
+          breakpoint="lg"
+          collapsedWidth={window.innerWidth < 768 ? 0 : 80}
+        >
+          <Menu
+            mode="inline"
+            selectedKeys={[currentView]}
+            onClick={({ key }) => onMenuClick(key)}
+            items={[
+              { key: "dashboard", icon: <AppstoreOutlined />, label: "Dashboard" },
+              { key: "settings", icon: <SettingOutlined />, label: "Settings" },
+              { key: "logs", icon: <FileTextOutlined />, label: "Logs" },
+            ]}
+          />
+        </Sider>
+
+        <Layout style={{ padding: "16px" }}>
+          <Content
+            style={{
+              padding: 24,
+              margin: 0,
+              background: colorBgContainer,
+              borderRadius: borderRadiusLG,
+              minHeight: "calc(100vh - 64px - 32px)",
+            }}
+          >
+            {children}
+          </Content>
+        </Layout>
+      </Layout>
+    </Layout>
+  );
+};
