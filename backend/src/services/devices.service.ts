@@ -1,5 +1,6 @@
 import { sql } from '../db'
 import { bacnetService } from './bacnet.service'
+import { settingsService } from './settings.service' // [UPDATED] Import settingsService
 import type { CreateDeviceDto } from '../dtos/bacnet.dto'
 
 export const devicesService = {
@@ -12,15 +13,25 @@ export const devicesService = {
   },
 
   /**
-   * สแกนหาอุปกรณ์ (Discovery)
+   * สแกนหาอุปกรณ์ (Discovery) - [UPDATED] ใช้ค่าจาก Settings
    */
   async discoverDevices() {
-    return await bacnetService.discoverDevices(3)
+    // 1. ดึงค่า Config จาก Database
+    const settings = await settingsService.getSettings()
+    
+    // 2. ดึงค่า timeout (ms) ถ้าไม่มีให้ใช้ Default 3000ms
+    const timeoutMs = Number(settings.discovery_timeout) || 3000
+    
+    // 3. แปลง ms เป็น seconds (เพราะ bacnetService รับเป็นวินาที)
+    // ปัดเศษขึ้น เช่น 3500ms -> 4s
+    const timeoutSec = Math.ceil(timeoutMs / 1000)
+
+    // console.log(`🔍 Discovery with timeout: ${timeoutMs}ms (${timeoutSec}s)`)
+
+    return await bacnetService.discoverDevices(timeoutSec)
   },
 
-  /**
-   * เพิ่มอุปกรณ์ลง Database
-   */
+  
   async addDevices(devicesToAdd: CreateDeviceDto[]) {
     const results = await sql.begin(async sql => {
       const inserted = []
