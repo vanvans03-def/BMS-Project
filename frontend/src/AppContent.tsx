@@ -24,10 +24,15 @@ import { DiscoveryModal } from "./components/DiscoveryModal"
 import { DeviceStatsCards, PointStatsCards } from "./components/StatsCards"
 import { GeneralSettings, NetworkSettings, UserSettings, DatabaseSettings } from "./components/SettingsTabs"
 import { LogsPage } from "./components/LogsPage"
-import { ProfileModal } from "./components/ProfileModal" // [1] Import ProfileModal
+import { ProfileModal } from "./components/ProfileModal"
 
 const { Header, Content, Sider } = Layout
 const { Title, Text } = Typography
+
+// [1] เพิ่ม Interface สำหรับรับ Prop onBack
+interface AppContentProps {
+  onBack: () => void
+}
 
 interface Device {
   id: number
@@ -62,7 +67,8 @@ interface SystemSettings {
   [key: string]: any
 }
 
-function AppContent() {
+// [2] รับ Prop onBack เข้ามาใน Component
+function AppContent({ onBack }: AppContentProps) {
   const { user, logout } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [searchText, setSearchText] = useState("")
@@ -74,6 +80,7 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<"dashboard" | "detail" | "settings" | "logs">("dashboard")
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
 
+  // ... (State อื่นๆ คงเดิม) ...
   const [isDiscoveryModalOpen, setIsDiscoveryModalOpen] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [discoveredDevices, setDiscoveredDevices] = useState<any[]>([])
@@ -92,6 +99,7 @@ function AppContent() {
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
+  // ... (Queries: settings, devices, points เหมือนเดิม ไม่ต้องแก้) ...
   const { data: settings, refetch: refetchSettings } = useQuery<SystemSettings>({
     queryKey: ["settings"],
     queryFn: async () => {
@@ -138,6 +146,7 @@ function AppContent() {
     enabled: currentView === "detail" && !!selectedDevice,
   })
 
+  // ... (Effect: Monitoring Loop เหมือนเดิม) ...
   useEffect(() => {
     if (currentView !== "detail" || !selectedDevice || !points || points.length === 0) {
       setIsMonitoring(false)
@@ -177,6 +186,8 @@ function AppContent() {
     }
   }, [currentView, selectedDevice, points, pollingInterval])
 
+  // ... (Logic เดิม: handleMenuClick, handleViewDevice, handleScan, handleAddSelected, etc.) ...
+  
   const existingDeviceIds = useMemo(() => {
     return new Set(devices?.map((d) => d.device_instance_id) || [])
   }, [devices])
@@ -322,14 +333,13 @@ function AppContent() {
     }
   }
 
-  // [3] User Dropdown Menu - ผูกฟังก์ชันเปิด Modal
   const userMenu = {
     items: [
       {
         key: 'profile',
         icon: <UserOutlined />,
         label: 'Profile',
-        onClick: () => setIsProfileModalOpen(true) // เพิ่ม onClick
+        onClick: () => setIsProfileModalOpen(true)
       },
       {
         type: 'divider' as const,
@@ -344,6 +354,7 @@ function AppContent() {
     ]
   }
 
+  // --- Render Sections (Dashboard, Detail, Settings) คงเดิม ---
   const renderDashboard = () => (
     <>
       <div style={{ marginBottom: 24 }} data-aos="fade-down">
@@ -521,6 +532,7 @@ function AppContent() {
     <Layout style={{ minHeight: "100vh" }}>
       {contextHolder}
 
+      {/* [3] Header + ปุ่ม Back */}
       <Header
         style={{
           display: "flex",
@@ -532,9 +544,17 @@ function AppContent() {
           zIndex: 1000,
         }}
       >
+        {/* ส่วนปุ่ม Back: คลิกแล้วเรียก onBack() */}
+        <Space style={{ cursor: 'pointer', marginRight: 16 }} onClick={onBack}>
+            <ArrowLeftOutlined style={{ color: 'white', fontSize: 18 }} />
+            <Text style={{ color: 'white', fontSize: 16, fontWeight: 600 }}>Portal</Text>
+        </Space>
+        
+        <Divider type="vertical" style={{ background: 'rgba(255,255,255,0.2)', margin: '0 16px' }} />
+
         <DatabaseOutlined style={{ fontSize: 24, marginRight: 12, color: "#1890ff" }} />
         <Title level={4} style={{ margin: 0, color: "white" }}>
-          BMS Project
+          BACnet System
         </Title>
         <div style={{ flex: 1 }} />
         <Space>

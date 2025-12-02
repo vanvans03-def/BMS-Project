@@ -1,5 +1,6 @@
 import { sql } from '../db'
 import { bacnetService } from './bacnet.service'
+import { modbusService } from './modbus.service' // [Import ใหม่]
 import type { ReadRequestDto } from '../dtos/bacnet.dto'
 import type { MonitorResponse } from '../dtos/monitor.dto'
 
@@ -9,7 +10,7 @@ export const monitorService = {
    */
   async readDevicePoints(deviceId: number): Promise<MonitorResponse> {
     try {
-      // 1. ดึง Device จาก Database
+      // 1. ดึง Device จาก Database พร้อม Protocol
       const [device] = await sql`
         SELECT * FROM devices WHERE id = ${deviceId}
       `
@@ -20,7 +21,7 @@ export const monitorService = {
 
       // 2. ดึง Points ที่ต้องการ Monitor
       const points = await sql`
-        SELECT id, object_type, object_instance, point_name
+        SELECT id, object_type, object_instance, point_name, register_type, data_type
         FROM points 
         WHERE device_id = ${deviceId}
           AND is_monitor = true
@@ -32,31 +33,66 @@ export const monitorService = {
         return { success: true, values: [] }
       }
 
-      // 3. เตรียม Payload และยิง BACnet
-      const readRequests: ReadRequestDto[] = points.map(point => ({
-        deviceId: device.device_instance_id,
-        objectType: point.object_type,
-        instance: point.object_instance,
-        propertyId: 'PROP_PRESENT_VALUE'
-      }))
+      let values = []
 
-      // console.log(`📊 [Monitor] Reading ${readRequests.length} points from device ${device.device_instance_id}`)
-      
-      const results = await bacnetService.readMultiple(readRequests)
+      // -------------------------------------------------------
+      // CASE A: MODBUS
+      // -------------------------------------------------------
+      if (device.protocol === 'MODBUS') {
+        // วนลูปอ่านค่าทีละ Point (หรือจะปรับเป็น Read Multiple ทีหลังก็ได้)
+        const promises = points.map(async (point) => {
+            try {
+                // เรียก modbusService ที่เตรียมไว้
+                const val = await modbusService.readPointValue(point.id)
+                return {
+                    pointId: point.id,
+                    pointName: point.point_name,
+                    objectType: point.register_type || 'UNKNOWN',
+                    instance: point.object_instance,
+                    value: val,
+                    status: val !== null ? 'ok' : 'error',
+                    timestamp: new Date().toISOString()
+                }
+            } catch (err) {
+                return {
+                    pointId: point.id,
+                    pointName: point.point_name,
+                    objectType: point.register_type || 'UNKNOWN',
+                    instance: point.object_instance,
+                    value: null,
+                    status: 'error',
+                    timestamp: new Date().toISOString()
+                }
+            }
+        })
+        values = await Promise.all(promises)
+      } 
+      // -------------------------------------------------------
+      // CASE B: BACNET (Logic เดิม)
+      // -------------------------------------------------------
+      else {
+        const readRequests: ReadRequestDto[] = points.map(point => ({
+            deviceId: device.device_instance_id,
+            objectType: point.object_type,
+            instance: point.object_instance,
+            propertyId: 'PROP_PRESENT_VALUE'
+        }))
+        
+        const results = await bacnetService.readMultiple(readRequests)
 
-      // 4. Map ผลลัพธ์
-      const values = points.map((point, index) => {
-        const result = results[index]
-        return {
-          pointId: point.id,
-          pointName: point.point_name,
-          objectType: point.object_type,
-          instance: point.object_instance,
-          value: result?.value ?? null,
-          status: result?.status ?? 'error',
-          timestamp: new Date().toISOString()
-        }
-      })
+        values = points.map((point, index) => {
+            const result = results[index]
+            return {
+                pointId: point.id,
+                pointName: point.point_name,
+                objectType: point.object_type,
+                instance: point.object_instance,
+                value: result?.value ?? null,
+                status: result?.status ? 'ok' : 'error',
+                timestamp: new Date().toISOString()
+            }
+        })
+      }
 
       return {
         success: true,

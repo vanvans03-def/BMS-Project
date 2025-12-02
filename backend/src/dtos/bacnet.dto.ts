@@ -71,3 +71,12 @@ export interface WriteRequestDto {
   value: any
   priority?: number
 }
+
+export interface CreateDevicePayload {
+  device_name: string
+  device_instance_id: number // สำหรับ Modbus ใส่เป็น ID หลอกๆ หรือใช้ Auto Increment ก็ได้ แต่ BACnet ต้องใช้
+  ip_address: string
+  network_number?: number
+  protocol?: 'BACNET' | 'MODBUS' // เพิ่ม Field นี้
+  unit_id?: number               // เพิ่ม Field นี้
+}

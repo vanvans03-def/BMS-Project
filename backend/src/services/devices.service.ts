@@ -1,7 +1,7 @@
 import { sql } from '../db'
 import { bacnetService } from './bacnet.service'
 import { settingsService } from './settings.service' // [UPDATED] Import settingsService
-import type { CreateDeviceDto } from '../dtos/bacnet.dto'
+import type { CreateDeviceDto, CreateDevicePayload } from '../dtos/bacnet.dto'
 
 export const devicesService = {
   /**
@@ -32,19 +32,22 @@ export const devicesService = {
   },
 
   
-  async addDevices(devicesToAdd: CreateDeviceDto[]) {
+async addDevices(devicesToAdd: CreateDevicePayload[]) {
     const results = await sql.begin(async sql => {
       const inserted = []
       for (const dev of devicesToAdd) {
+        // ถ้าเป็น Modbus ไม่ต้องเช็ค device_instance_id ซ้ำกับ BACnet ก็ได้ หรือจะใช้ logic เดิมก็ได้
+        // แต่เพื่อความง่าย เราใช้ logic เดิมไปก่อน
         const instanceId = dev.device_instance_id;
         const name = dev.device_name ?? `Device-${instanceId}`;
         const ip = dev.ip_address ?? null; 
         const network = dev.network_number ?? 0; 
+        
+        // Default Values
+        const protocol = dev.protocol || 'BACNET';
+        const unitId = dev.unit_id || null;
 
-        if (instanceId === undefined || instanceId === null) {
-            continue;
-        }
-
+        // เช็คซ้ำ (Check Existing)
         const existing = await sql`
           SELECT id FROM devices WHERE device_instance_id = ${instanceId}
         `
@@ -56,13 +59,17 @@ export const devicesService = {
                 device_instance_id, 
                 ip_address, 
                 network_number,
-                is_active
+                is_active,
+                protocol,    -- New
+                unit_id      -- New
             ) VALUES (
                 ${name}, 
                 ${instanceId}, 
                 ${ip}, 
                 ${network},
-                true
+                true,
+                ${protocol}, -- New
+                ${unitId}    -- New
             )
             RETURNING *
           `
