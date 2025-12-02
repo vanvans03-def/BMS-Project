@@ -9,7 +9,8 @@ export const auditLogRoutes = new Elysia({ prefix: '/audit-logs' })
         actionType: query.actionType,
         startDate: query.startDate,
         endDate: query.endDate,
-        user: query.user
+        user: query.user,
+        protocols: query.protocols
     })
   }, {
     query: t.Object({
@@ -17,6 +18,7 @@ export const auditLogRoutes = new Elysia({ prefix: '/audit-logs' })
         actionType: t.Optional(t.String()),
         startDate: t.Optional(t.String()),
         endDate: t.Optional(t.String()),
-        user: t.Optional(t.String())
+        user: t.Optional(t.String()),
+        protocols: t.Optional(t.String())
     })
   })

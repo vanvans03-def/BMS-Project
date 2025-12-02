@@ -5,7 +5,7 @@ import type { Point, Device, SyncPointsResult } from '../dtos/points.dto'
 import type { WriteRequestDto, ReadRequestDto } from '../dtos/bacnet.dto'
 
 class PointsService {
-  
+
   async getPointsByDeviceId(deviceId: number): Promise<Point[]> {
     const result = await sql`
       SELECT id, device_id, object_type, object_instance, point_name, description, is_monitor, created_at
@@ -45,51 +45,50 @@ class PointsService {
 
     // 3. [NEW] อ่านค่าปัจจุบันก่อน (Old Value) เพื่อเอามาทำ Log
     // [FIXED] กำหนด type เป็น any เพื่อให้รับค่าตัวเลข/boolean ได้ โดยไม่ error เรื่อง type string
-    let oldValue: any = 'Unknown' 
+    let oldValue: any = 'Unknown'
     try {
-        const readReq: ReadRequestDto[] = [{
-            deviceId: device.device_instance_id,
-            objectType: point.object_type,
-            instance: point.object_instance,
-            propertyId: 'PROP_PRESENT_VALUE'
-        }]
-        const readRes = await bacnetService.readMultiple(readReq)
-        if (readRes && readRes.length > 0) {
-            // [FIXED] ใช้ ?. เพื่อป้องกัน error Object is possibly 'undefined'
-            oldValue = readRes[0]?.value ?? 'Unknown'
-        }
+      const readReq: ReadRequestDto[] = [{
+        deviceId: device.device_instance_id,
+        objectType: point.object_type,
+        instance: point.object_instance,
+        propertyId: 'PROP_PRESENT_VALUE'
+      }]
+      const readRes = await bacnetService.readMultiple(readReq)
+      if (readRes && readRes.length > 0) {
+        // [FIXED] ใช้ ?. เพื่อป้องกัน error Object is possibly 'undefined'
+        oldValue = readRes[0]?.value ?? 'Unknown'
+      }
     } catch (err) {
-        console.warn('⚠️ Could not read old value for log:', err)
+      console.warn('⚠️ Could not read old value for log:', err)
     }
 
     // 4. ส่งคำสั่งเขียนค่า (Write)
     const bacnetRequest: WriteRequestDto = {
-        deviceId: device.device_instance_id,
-        objectType: point.object_type,
-        instance: point.object_instance,
-        propertyId: 'PROP_PRESENT_VALUE',
-        value: value,
-        priority: priority
+      deviceId: device.device_instance_id,
+      objectType: point.object_type,
+      instance: point.object_instance,
+      propertyId: 'PROP_PRESENT_VALUE',
+      value: value,
+      priority: priority
     }
 
     const success = await bacnetService.writeProperty(bacnetRequest)
-    
+
     if (success) {
-        // 5. จัดรูปแบบข้อมูลก่อนบันทึก Log
-        const targetDisplay = `[${device.device_name}] ${point.point_name}`
-        const detailDisplay = `${oldValue} -> ${value} (Pri: ${priority || 8})`
+      const targetDisplay = `[${device.device_name}] ${point.point_name}`
+      const detailDisplay = `${oldValue} -> ${value} (Pri: ${priority || 8})`
 
-        // ✅ บันทึก Audit Log
-        await auditLogService.recordLog({
-            user_name: userName,
-            action_type: 'WRITE',
-            target_name: targetDisplay,
-            details: detailDisplay
-        })
+      await auditLogService.recordLog({
+        user_name: userName,
+        action_type: 'WRITE',
+        target_name: targetDisplay,
+        details: detailDisplay,
+        protocol: 'BACNET'
+      })
 
-        return { success: true, message: 'Write command sent successfully' }
+      return { success: true, message: 'Write command sent successfully' }
     } else {
-        throw new Error('Failed to write value')
+      throw new Error('Failed to write value')
     }
   }
 

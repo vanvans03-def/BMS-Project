@@ -66,22 +66,28 @@ export const databaseService = {
   /**
    * ลบข้อมูลทั้งหมด (Factory Reset)
    */
-  async clearAllData(): Promise<void> {
+async clearAllData(protocol: string = 'ALL'): Promise<void> {
     try {
-      console.warn('⚠️ [DATABASE] Factory Reset - Deleting ALL data...')
+      console.warn(`⚠️ [DATABASE] Clear Data Request. Protocol: ${protocol}`)
       
       await sql.begin(async sql => {
-        // ลบข้อมูลทั้งหมด (ระวัง!)
-        await sql`DELETE FROM points`
-        await sql`DELETE FROM devices`
-        // ไม่ลบ Users เพื่อไม่ให้ Locked Out
-        // await sql`DELETE FROM users` 
-        await sql`DELETE FROM system_settings`
         
-        console.log('✅ All data deleted successfully')
+        if (protocol === 'BACNET') {
+            await sql`DELETE FROM devices WHERE protocol = 'BACNET'`
+            console.log('✅ BACnet data deleted')
+        } 
+        else if (protocol === 'MODBUS') {
+            await sql`DELETE FROM devices WHERE protocol = 'MODBUS'`
+            console.log('✅ Modbus data deleted')
+        }
+        else {
+            await sql`DELETE FROM points`
+            await sql`DELETE FROM devices`
+            console.log('✅ All data deleted successfully')
+        }
       })
     } catch (error) {
-      console.error('❌ Clear All Data Failed:', error)
+      console.error('❌ Clear Data Failed:', error)
       throw error
     }
   },

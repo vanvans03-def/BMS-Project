@@ -10,23 +10,18 @@ export const databaseRoutes = new Elysia({ prefix: '/database' })
 
   // 2. POST /database/clear-all - ลบข้อมูลทั้งหมด (ระวัง!)
   .post('/clear-all', async ({ body }) => {
-    const { confirmText } = body
-    
+    const { confirmText, protocol } = body // [UPDATED] รับ protocol
+
     if (confirmText !== 'DELETE ALL DATA') {
-      return { 
-        success: false, 
-        message: 'Confirmation text does not match' 
-      }
+      return { success: false, message: 'Confirmation text does not match' }
     }
 
-    await databaseService.clearAllData()
-    return { 
-      success: true, 
-      message: 'All data has been deleted successfully' 
-    }
+    await databaseService.clearAllData(protocol)
+    return { success: true, message: 'Data deleted successfully' }
   }, {
     body: t.Object({
-      confirmText: t.String()
+      confirmText: t.String(),
+      protocol: t.Optional(t.String()) // [UPDATED]
     })
   })
 
@@ -38,8 +33,8 @@ export const databaseRoutes = new Elysia({ prefix: '/database' })
   // 4. POST /database/optimize - Optimize Database
   .post('/optimize', async () => {
     await databaseService.optimizeDatabase()
-    return { 
-      success: true, 
-      message: 'Database optimized successfully' 
+    return {
+      success: true,
+      message: 'Database optimized successfully'
     }
   })

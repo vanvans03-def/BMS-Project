@@ -4,9 +4,10 @@ export interface AuditLog {
   id?: number
   timestamp?: string
   user_name: string
-  action_type: 'WRITE' | 'SETTING' | 'USER'
+  action_type: 'WRITE' | 'SETTING' | 'USER' | 'SYSTEM'
   target_name: string
   details: string
+  protocol?: 'BACNET' | 'MODBUS' | 'ALL'
 }
 
 export const auditLogService = {
@@ -16,8 +17,15 @@ export const auditLogService = {
   async recordLog(log: AuditLog) {
     try {
       await sql`
-        INSERT INTO audit_logs (user_name, action_type, target_name, details, timestamp)
-        VALUES (${log.user_name}, ${log.action_type}, ${log.target_name}, ${log.details}, NOW())
+        INSERT INTO audit_logs (user_name, action_type, target_name, details, protocol, timestamp)
+        VALUES (
+            ${log.user_name}, 
+            ${log.action_type}, 
+            ${log.target_name}, 
+            ${log.details}, 
+            ${log.protocol || 'ALL'},
+            NOW()
+        )
       `
     } catch (error) {
       console.error('❌ Failed to record audit log:', error)
@@ -26,13 +34,15 @@ export const auditLogService = {
 
   /**
    * ดึง Logs พร้อม Filter
+   * [UPDATED] เพิ่ม protocols filter (array string)
    */
   async getLogs(filters: { 
     search?: string, 
     actionType?: string, 
     startDate?: string, 
     endDate?: string,
-    user?: string
+    user?: string,
+    protocols?: string // รับเป็น string ขั้นด้วย comma เช่น "BACNET,ALL"
   }) {
     const conditions = []
     
@@ -52,6 +62,14 @@ export const auditLogService = {
 
     if (filters.user && filters.user !== 'all') {
         conditions.push(sql`user_name ILIKE ${filters.user}`)
+    }
+
+    // [UPDATED] Logic กรอง Protocol
+    if (filters.protocols && filters.protocols !== 'all') {
+        const protocolList = filters.protocols.split(',').map(p => p.trim().toUpperCase())
+        if (protocolList.length > 0) {
+            conditions.push(sql`protocol IN ${sql(protocolList)}`)
+        }
     }
 
     if (filters.startDate && filters.endDate) {
