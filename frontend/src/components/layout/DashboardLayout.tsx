@@ -17,7 +17,6 @@ interface DashboardLayoutProps {
   currentView: string;
   onMenuClick: (key: string) => void;
   children: React.ReactNode;
-  // [UPDATED] เพิ่ม onProfileClick เข้าไปใน Interface (เป็น Optional ก็ได้)
   onProfileClick?: () => void;
 }
 
@@ -29,7 +28,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   currentView,
   onMenuClick,
   children,
-  onProfileClick // [UPDATED] รับ prop เข้ามา
+  onProfileClick
 }) => {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -41,8 +40,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         key: 'profile',
         icon: <UserOutlined />,
         label: 'Profile',
-        // [UPDATED] เรียกใช้ function ที่รับมา
-        onClick: onProfileClick 
+        onClick: onProfileClick
       },
       {
         type: 'divider' as const,

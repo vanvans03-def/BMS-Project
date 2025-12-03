@@ -1,17 +1,14 @@
 /* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Table, Tag, Button, Typography, Badge } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { EditOutlined, ThunderboltOutlined, NumberOutlined } from '@ant-design/icons'
+import { useEffect, useRef, useState } from 'react' // [UPDATED] เพิ่ม Hooks
 import { AnimatedNumber } from '../../components/AnimatedNumber'
 
-// [UPDATED] Import Type กลาง
 import type { Point, PointValue } from '../../types/common'
 
 const { Text } = Typography
-
-// [REMOVED] ลบ interface Point ภายในทิ้ง
-// interface Point { ... }
-// interface PointValue { ... }
 
 interface Props {
   points: Point[]
@@ -21,6 +18,29 @@ interface Props {
 }
 
 export const ModbusPointTable = ({ points, pointValues, loading, onWrite }: Props) => {
+  // [UPDATED] 1. เพิ่ม State และ Ref สำหรับจัดการ Animation
+  const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
+  const previousValues = useRef<Map<number, any>>(new Map())
+
+  // [UPDATED] 2. ตรวจสอบค่าที่เปลี่ยนไปเพื่อ Trigger Animation
+  useEffect(() => {
+    const newUpdated = new Set<number>()
+
+    pointValues.forEach((value, pointId) => {
+      const prevValue = previousValues.current.get(pointId)
+      // ถ้ามีค่าเดิม และค่าใหม่ไม่เท่ากับค่าเดิม ให้ถือว่ามีการอัปเดต
+      if (prevValue !== undefined && prevValue !== value.value) {
+        newUpdated.add(pointId)
+      }
+      previousValues.current.set(pointId, value.value)
+    })
+
+    if (newUpdated.size > 0) {
+      setUpdatedPoints(newUpdated)
+      // ล้างสถานะ highlight ออกหลังจาก 800ms (เพื่อให้สีจางหายไป)
+      setTimeout(() => setUpdatedPoints(new Set()), 800)
+    }
+  }, [pointValues])
   
   const columns: ColumnsType<Point> = [
     {
@@ -28,11 +48,10 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite }: Prop
       dataIndex: 'register_type',
       key: 'type',
       width: 150,
-      render: (type: string | undefined) => { // [UPDATED] รองรับ undefined
+      render: (type: string | undefined) => {
         let color = 'default'
         let icon = <NumberOutlined />
         
-        // ตรวจสอบค่า type ก่อนใช้งาน
         if (type === 'COIL') { color = 'green'; icon = <ThunderboltOutlined /> }
         if (type === 'HOLDING_REGISTER') { color = 'blue'; icon = <NumberOutlined /> }
         
@@ -58,23 +77,44 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite }: Prop
       width: 150,
       render: (_, record) => {
         const data = pointValues.get(record.id)
-        if (!data) return <Badge status="default" text="-" />
+        // [UPDATED] 3. ตรวจสอบสถานะว่าต้อง Highlight หรือไม่
+        const isUpdated = updatedPoints.has(record.id)
 
-        // [UPDATED] ใช้ optional chaining หรือตรวจสอบค่าก่อน
-        if (record.register_type === 'COIL') {
-           const isOn = data.value === true || data.value === 1 || data.value === 'true'
-           return (
-             <Badge 
-               status={isOn ? 'success' : 'default'} 
-               text={isOn ? 'ON' : 'OFF'} 
-             />
-           )
+        // เตรียม Content ที่จะแสดง
+        let content = <Badge status="default" text="-" />
+
+        if (data) {
+            if (record.register_type === 'COIL') {
+                const isOn = data.value === true || data.value === 1 || data.value === 'true'
+                content = (
+                    <Badge 
+                    status={isOn ? 'success' : 'default'} 
+                    text={isOn ? 'ON' : 'OFF'} 
+                    />
+                )
+            } else {
+                content = (
+                    <Text style={{ color: '#faad14', fontSize: 16 }}> {/* ใช้สีส้มเพื่อให้เข้ากับธีม Modbus */}
+                        <AnimatedNumber value={Number(data.value)} decimals={0} />
+                    </Text>
+                )
+            }
         }
 
+        // [UPDATED] 4. หุ้ม Content ด้วย Div ที่มี Style เปลี่ยนสีพื้นหลัง
         return (
-          <Text style={{ color: '#1890ff', fontSize: 16 }}>
-             <AnimatedNumber value={Number(data.value)} decimals={0} />
-          </Text>
+            <div
+              style={{
+                padding: "4px 8px",
+                borderRadius: "4px",
+                transition: "all 0.5s ease", // Animation fade
+                // ถ้า isUpdated เป็น true ให้แสดงสีพื้นหลัง (สีส้มจางๆ)
+                backgroundColor: isUpdated ? "rgba(250, 173, 20, 0.2)" : "transparent",
+                border: isUpdated ? "1px solid rgba(250, 173, 20, 0.4)" : "1px solid transparent",
+              }}
+            >
+              {content}
+            </div>
         )
       }
     },

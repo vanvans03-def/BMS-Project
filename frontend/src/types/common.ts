@@ -17,8 +17,8 @@ export interface Point {
   object_instance: number
   point_name: string
   is_monitor: boolean
-  // Add specific fields
   register_type?: string
+  data_type?: string
 }
 
 export interface PointValue {

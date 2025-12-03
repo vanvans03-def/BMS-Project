@@ -37,14 +37,18 @@ const ModbusNetworkSettings = () => {
         catch { message.error('Failed') } finally { setLoading(false) }
     }
     return (
-        <Card><div data-aos="fade-up"><Title level={5}><ApiOutlined /> Modbus Config</Title>
-        <Form form={form} layout="vertical" onFinish={onFinish}>
-            <Row gutter={16}>
-                <Col xs={12}><Form.Item name="polling_interval" label="Polling Interval (ms)"><InputNumber style={{width:'100%'}}/></Form.Item></Col>
-                <Col xs={12}><Form.Item name="modbus_timeout" label="Timeout (ms)"><InputNumber style={{width:'100%'}}/></Form.Item></Col>
-            </Row>
-            <Button type="primary" htmlType="submit" icon={<SaveOutlined/>} loading={loading}>Save</Button>
-        </Form></div></Card>
+        <Card>
+            <div data-aos="fade-up">
+                <Title level={5}><ApiOutlined /> Modbus Config</Title>
+                <Form form={form} layout="vertical" onFinish={onFinish}>
+                    <Row gutter={16}>
+                        <Col xs={12}><Form.Item name="polling_interval" label="Polling Interval (ms)"><InputNumber style={{width:'100%'}}/></Form.Item></Col>
+                        <Col xs={12}><Form.Item name="modbus_timeout" label="Timeout (ms)"><InputNumber style={{width:'100%'}}/></Form.Item></Col>
+                    </Row>
+                    <Button type="primary" htmlType="submit" icon={<SaveOutlined/>} loading={loading}>Save</Button>
+                </Form>
+            </div>
+        </Card>
     )
 }
 
@@ -126,27 +130,45 @@ export default function ModbusApp({ onBack }: ModbusAppProps) {
           <Col><Space><Button icon={<ReloadOutlined />} onClick={() => refetchDevices()}>Refresh</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => setIsDeviceModalOpen(true)}>Add Device</Button></Space></Col>
         </Row>
       </div>
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col span={8}><Card><Statistic title="Total Devices" value={devices?.length||0} prefix={<DatabaseOutlined />} /></Card></Col>
-        <Col span={8}><Card><Statistic title="Online" value={devices?.length||0} valueStyle={{ color: '#3f8600' }} prefix={<ThunderboltOutlined />} /></Card></Col>
-      </Row>
-      <Card title="Device List"><ModbusDeviceTable devices={devices||[]} loading={loadingDevices} onView={(d: any) => { setSelectedDevice(d); setCurrentView('detail') }} onDelete={()=>{}} /></Card>
+      
+      {/* [UPDATED] เพิ่ม data-aos="fade-up" ให้ Stats Cards */}
+      <div data-aos="fade-up">
+        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={12} md={8}><Card><Statistic title="Total Devices" value={devices?.length||0} prefix={<DatabaseOutlined />} /></Card></Col>
+            <Col xs={12} md={8}><Card><Statistic title="Online" value={devices?.length||0} valueStyle={{ color: '#3f8600' }} prefix={<ThunderboltOutlined />} /></Card></Col>
+        </Row>
+      </div>
+
+      {/* [UPDATED] เพิ่ม data-aos="fade-up" และ delay ให้ Device Table Card */}
+      <div data-aos="fade-up" data-aos-delay="200">
+        <Card title="Device List">
+            <ModbusDeviceTable devices={devices||[]} loading={loadingDevices} onView={(d: any) => { setSelectedDevice(d); setCurrentView('detail') }} onDelete={()=>{}} />
+        </Card>
+      </div>
     </>
   )
 
   const renderDetail = () => (
     <>
-      <div data-aos="fade-down"><Card style={{ marginBottom: 16 }}>
-        <Row gutter={16} align="middle">
-            <Col flex="auto">
-                <Button icon={<ArrowLeftOutlined />} type="link" onClick={() => { setSelectedDevice(null); setCurrentView('dashboard') }}>Back</Button>
-                <Title level={4} style={{ margin: 0 }}>{selectedDevice?.device_name}</Title>
-                <Text type="secondary"><GlobalOutlined /> {selectedDevice?.ip_address} (Unit: {selectedDevice?.unit_id})</Text>
-            </Col>
-            <Col><Space><Button type="primary" icon={<PlusOutlined />} onClick={() => setIsPointModalOpen(true)}>Add Point</Button><Button icon={<ReloadOutlined />} onClick={() => refetchPoints()}>Refresh</Button></Space></Col>
-        </Row>
-      </Card></div>
-      <Card><ModbusPointTable points={points||[]} pointValues={pointValues} loading={loadingPoints} onWrite={(p: any) => { setWritingPoint(p); setIsWriteModalOpen(true) }} /></Card>
+      <div data-aos="fade-down">
+        <Card style={{ marginBottom: 16 }}>
+            <Row gutter={16} align="middle">
+                <Col flex="auto">
+                    <Button icon={<ArrowLeftOutlined />} type="link" onClick={() => { setSelectedDevice(null); setCurrentView('dashboard') }}>Back</Button>
+                    <Title level={4} style={{ margin: 0 }}>{selectedDevice?.device_name}</Title>
+                    <Text type="secondary"><GlobalOutlined /> {selectedDevice?.ip_address} (Unit: {selectedDevice?.unit_id})</Text>
+                </Col>
+                <Col><Space><Button type="primary" icon={<PlusOutlined />} onClick={() => setIsPointModalOpen(true)}>Add Point</Button><Button icon={<ReloadOutlined />} onClick={() => refetchPoints()}>Refresh</Button></Space></Col>
+            </Row>
+        </Card>
+      </div>
+      
+      {/* [UPDATED] เพิ่ม data-aos ให้ส่วนตาราง Point ด้วย */}
+      <div data-aos="fade-up" data-aos-delay="200">
+        <Card>
+            <ModbusPointTable points={points||[]} pointValues={pointValues} loading={loadingPoints} onWrite={(p: any) => { setWritingPoint(p); setIsWriteModalOpen(true) }} />
+        </Card>
+      </div>
     </>
   )
 
@@ -164,12 +186,14 @@ export default function ModbusApp({ onBack }: ModbusAppProps) {
         {currentView === 'dashboard' && renderDashboard()}
         {currentView === 'detail' && renderDetail()}
         {currentView === 'settings' && (
-            <Card><Tabs items={[
-                { key: 'general', label: <span><GlobalOutlined /> General</span>, children: <GeneralSettings /> },
-                { key: 'network', label: <span><ApiOutlined /> Config</span>, children: <ModbusNetworkSettings /> },
-                { key: 'users', label: <span><UserOutlined /> Users</span>, children: <UserSettings /> },
-                { key: 'database', label: <span><DatabaseOutlined /> Database</span>, children: <DatabaseSettings /> },
-            ]} /></Card>
+            <Card>
+                <Tabs items={[
+                    { key: 'general', label: <span><GlobalOutlined /> General</span>, children: <GeneralSettings /> },
+                    { key: 'network', label: <span><ApiOutlined /> Config</span>, children: <ModbusNetworkSettings /> },
+                    { key: 'users', label: <span><UserOutlined /> Users</span>, children: <UserSettings /> },
+                    { key: 'database', label: <span><DatabaseOutlined /> Database</span>, children: <DatabaseSettings /> },
+                ]} />
+            </Card>
         )}
         {currentView === 'logs' && <LogsPage />}
 
