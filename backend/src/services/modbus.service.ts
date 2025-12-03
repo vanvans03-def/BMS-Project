@@ -10,13 +10,12 @@ import type {
   WriteSingleRegisterRequestDto
 } from '../dtos/modbus.dto'
 
-// ใช้ URL เดียวกับ BACnet ไปก่อน หรือแยก ENV ก็ได้ถ้า Gateway อยู่คนละ Port
-const GATEWAY_API_URL = Bun.env.MODBUS_API_URL || 'https://localhost:7013/api'
+const GATEWAY_API_URL = Bun.env.MODBUS_API_URL || 'https://localhost:7013'
 
-// สร้าง Client สำหรับยิงไป C# Gateway
 const client = axios.create({
   baseURL: GATEWAY_API_URL,
-  httpsAgent: new https.Agent({ rejectUnauthorized: false }) // ข้าม SSL Check สำหรับ Localhost
+  httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+  timeout: 10000
 })
 
 export const modbusService = {
@@ -34,15 +33,16 @@ export const modbusService = {
         quantity: 1
       }
 
+      console.log(`📖 [Modbus] Reading Coil: ${deviceIp}:${port} Unit:${unitId} Addr:${address}`)
+      
       const res = await client.post<ReadCoilResponseDto>('/read/coil', payload)
       
-      // Gateway คืนค่ามาเป็น Array [0] หรือ [1]
       if (res.data && res.data.values && res.data.values.length > 0) {
         return res.data.values[0] === 1
       }
       return null
     } catch (error) {
-      console.error(`❌ [Modbus] Read Coil Failed (IP: ${deviceIp}, Addr: ${address}):`, error)
+      console.error(`❌ [Modbus] Read Coil Failed (${deviceIp}:${address}):`, error)
       return null
     }
   },
@@ -50,7 +50,12 @@ export const modbusService = {
   /**
    * อ่านค่า Holding Register (Word) จาก Device
    */
-  async readHoldingRegister(deviceIp: string, port: number = 502, unitId: number, address: number): Promise<number | null> {
+  async readHoldingRegister(
+    deviceIp: string, 
+    port: number = 502, 
+    unitId: number, 
+    address: number
+  ): Promise<number | null> {
     try {
       const payload: ReadHoldingRegistersRequestDto = {
         remoteIP: deviceIp,
@@ -60,6 +65,8 @@ export const modbusService = {
         count: 1
       }
 
+      console.log(`📖 [Modbus] Reading Register: ${deviceIp}:${port} Unit:${unitId} Addr:${address}`)
+      
       const res = await client.post<ReadHoldingRegistersResponseDto>('/read/registers', payload)
       
       if (res.data && res.data.value !== undefined) {
@@ -67,19 +74,18 @@ export const modbusService = {
       }
       return null
     } catch (error) {
-      console.error(`❌ [Modbus] Read Register Failed (IP: ${deviceIp}, Addr: ${address}):`, error)
+      console.error(`❌ [Modbus] Read Register Failed (${deviceIp}:${address}):`, error)
       return null
     }
   },
 
   /**
-   * ฟังก์ชันรวมสำหรับอ่านค่า Point โดยดูจาก Config ใน DB
+   * อ่านค่า Point โดยดึง Config จาก Database
    */
   async readPointValue(pointId: number) {
-    // 1. ดึงข้อมูล Point และ Device ที่เกี่ยวข้อง
     const [info] = await sql`
       SELECT 
-        p.id, p.register_type, p.object_instance as address,
+        p.id, p.register_type, p.object_instance as address, p.data_type,
         d.ip_address, d.unit_id
       FROM points p
       JOIN devices d ON p.device_id = d.id
@@ -88,19 +94,20 @@ export const modbusService = {
 
     if (!info) throw new Error('Modbus Point not found')
 
-    // แยก Port ออกจาก IP Address (ถ้ามี format "192.168.1.1:502")
+    // แยก IP และ Port
     let ip = info.ip_address
     let port = 502
-    if (ip.includes(':')) {
+    if (ip && ip.includes(':')) {
       const parts = ip.split(':')
       ip = parts[0]
       port = parseInt(parts[1]) || 502
     }
 
-    // 2. เรียกฟังก์ชันอ่านตามประเภท Register
+    // อ่านค่าตาม Register Type
     if (info.register_type === 'COIL') {
       return await this.readCoil(ip, port, info.unit_id, info.address)
-    } else if (info.register_type === 'HOLDING_REGISTER') {
+    } 
+    if (info.register_type === 'HOLDING_REGISTER') {
       return await this.readHoldingRegister(ip, port, info.unit_id, info.address)
     }
 
@@ -108,21 +115,26 @@ export const modbusService = {
   },
 
   /**
-   * เขียนค่า Coil
+   * เขียนค่า Coil (Boolean)
    */
-  async writeCoil(pointId: number, value: boolean) {
+  async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
     const [info] = await sql`
-      SELECT p.object_instance as address, d.ip_address, d.unit_id
+      SELECT 
+        p.object_instance as address, p.point_name,
+        d.ip_address, d.unit_id, d.device_name
       FROM points p
       JOIN devices d ON p.device_id = d.id
       WHERE p.id = ${pointId}
     `
+    
     if (!info) throw new Error('Point not found')
 
     let ip = info.ip_address
     let port = 502
     if (ip.includes(':')) {
-       const parts = ip.split(':'); ip = parts[0]; port = parseInt(parts[1]) || 502;
+      const parts = ip.split(':')
+      ip = parts[0]
+      port = parseInt(parts[1]) || 502
     }
 
     const payload: WriteSingleCoilRequestDto = {
@@ -133,29 +145,44 @@ export const modbusService = {
       value: value
     }
 
-    await client.post('/write/coil', payload) 
+    console.log(`📝 [Modbus] Writing Coil:`, payload)
+    
+    await client.post('/write/coil', payload)
+    
+    // บันทึก Audit Log
+    const { auditLogService } = await import('./audit-log.service')
+    await auditLogService.recordLog({
+      user_name: userName,
+      action_type: 'WRITE',
+      target_name: `[${info.device_name}] ${info.point_name}`,
+      details: `Set to ${value ? 'ON' : 'OFF'}`,
+      protocol: 'MODBUS'
+    })
+    
     return true
   },
 
   /**
-   * เขียนค่า Register
+   * เขียนค่า Holding Register (Number)
    */
-  async writeRegister(pointId: number, value: number) {
+  async writeRegister(pointId: number, value: number, userName: string = 'System') {
     const [info] = await sql`
-      SELECT p.object_instance as address, d.ip_address, d.unit_id
+      SELECT 
+        p.object_instance as address, p.point_name,
+        d.ip_address, d.unit_id, d.device_name
       FROM points p
       JOIN devices d ON p.device_id = d.id
       WHERE p.id = ${pointId}
     `
     
-    // [FIXED] เพิ่มการตรวจสอบว่า info มีค่าหรือไม่
     if (!info) throw new Error('Point not found')
 
-    // Parse IP/Port...
     let ip = info.ip_address
     let port = 502
     if (ip.includes(':')) {
-       const parts = ip.split(':'); ip = parts[0]; port = parseInt(parts[1]) || 502;
+      const parts = ip.split(':')
+      ip = parts[0]
+      port = parseInt(parts[1]) || 502
     }
 
     const payload: WriteSingleRegisterRequestDto = {
@@ -166,7 +193,33 @@ export const modbusService = {
       value: value
     }
 
+    console.log(`📝 [Modbus] Writing Register:`, payload)
+    
     await client.post('/write/register', payload)
+    
+    // บันทึก Audit Log
+    const { auditLogService } = await import('./audit-log.service')
+    await auditLogService.recordLog({
+      user_name: userName,
+      action_type: 'WRITE',
+      target_name: `[${info.device_name}] ${info.point_name}`,
+      details: `Set to ${value}`,
+      protocol: 'MODBUS'
+    })
+    
     return true
+  },
+
+  /**
+   * ทดสอบการเชื่อมต่อกับ Device
+   */
+  async testConnection(deviceIp: string, port: number = 502, unitId: number): Promise<boolean> {
+    try {
+      // อ่าน Register 0 เพื่อทดสอบการเชื่อมต่อ
+      const result = await this.readHoldingRegister(deviceIp, port, unitId, 0)
+      return result !== null
+    } catch {
+      return false
+    }
   }
 }
