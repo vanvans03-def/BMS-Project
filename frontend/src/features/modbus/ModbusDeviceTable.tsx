@@ -40,16 +40,31 @@ export const ModbusDeviceTable = ({ devices, loading, onView, onDelete }: Props)
       key: 'device_name',
       render: (text) => <Text strong>{text}</Text>
     },
-    {
+   {
       title: 'Connection',
       key: 'connection',
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Tag icon={<GlobalOutlined />} color="blue">
-            {record.ip_address} : {record.port || 502}
-          </Tag>
-        </Space>
-      )
+      render: (_, record) => {
+        // [UPDATED] แยก IP และ Port ออกมาแสดง
+        let displayIp = record.ip_address
+        let displayPort = 502 // Default
+        
+        if (record.ip_address && record.ip_address.includes(':')) {
+          const parts = record.ip_address.split(':')
+          displayIp = parts[0]
+          displayPort = parseInt(parts[1]) || 502
+        }
+        
+        return (
+          <Space direction="vertical" size={0}>
+            <Tag icon={<GlobalOutlined />} color="blue">
+              {displayIp}
+            </Tag>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Port: {displayPort}
+            </Text>
+          </Space>
+        )
+      }
     },
     {
       title: 'Unit ID',

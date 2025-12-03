@@ -9,7 +9,7 @@ export const devicesRoutes = new Elysia({ prefix: '/devices' })
     return await devicesService.getAllDevices()
   })
 
-  // 2. สแกนหาอุปกรณ์
+  // 2. สแกนหาอุปกรณ์ BACnet
   .get('/discover', async () => {
     return await devicesService.discoverDevices()
   })
@@ -22,6 +22,13 @@ export const devicesRoutes = new Elysia({ prefix: '/devices' })
         device_name: t.String(),
         device_instance_id: t.Number(),
         ip_address: t.String(),
-        network_number: t.Optional(t.Number())
+        network_number: t.Optional(t.Number()),
+        protocol: t.Optional(t.String()),
+        unit_id: t.Optional(t.Number())
     }))
+  })
+
+  // 4. [NEW] ลบอุปกรณ์ (รองรับทั้ง BACnet และ Modbus)
+  .delete('/:id', async ({ params }) => {
+    return await devicesService.deleteDevice(Number(params.id))
   })

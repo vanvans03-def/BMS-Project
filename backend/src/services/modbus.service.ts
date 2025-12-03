@@ -23,7 +23,7 @@ export const modbusService = {
   /**
    * อ่านค่า Coil (Boolean) จาก Device
    */
-  async readCoil(deviceIp: string, port: number = 502, unitId: number, address: number): Promise<boolean | null> {
+  async readCoil(deviceIp: string, port: number, unitId: number, address: number): Promise<boolean | null> {
     try {
       const payload: ReadCoilRequestDto = {
         remoteIP: deviceIp,
@@ -52,7 +52,7 @@ export const modbusService = {
    */
   async readHoldingRegister(
     deviceIp: string, 
-    port: number = 502, 
+    port: number, 
     unitId: number, 
     address: number
   ): Promise<number | null> {
@@ -113,11 +113,7 @@ export const modbusService = {
 
     return null
   },
-
-  /**
-   * เขียนค่า Coil (Boolean)
-   */
-  async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
+async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
     const [info] = await sql`
       SELECT 
         p.object_instance as address, p.point_name,
@@ -129,15 +125,17 @@ export const modbusService = {
     
     if (!info) throw new Error('Point not found')
 
+    // แยก IP และ Port
     let ip = info.ip_address
     let port = 502
-    if (ip.includes(':')) {
+    if (ip && ip.includes(':')) {
       const parts = ip.split(':')
       ip = parts[0]
       port = parseInt(parts[1]) || 502
     }
 
-    const payload: WriteSingleCoilRequestDto = {
+    // [UPDATED] ใช้ endpoint ที่ถูกต้องตาม Swagger
+    const payload = {
       remoteIP: ip,
       remotePort: port,
       unitIdentifier: info.unit_id,
@@ -177,15 +175,17 @@ export const modbusService = {
     
     if (!info) throw new Error('Point not found')
 
+    // แยก IP และ Port
     let ip = info.ip_address
     let port = 502
-    if (ip.includes(':')) {
+    if (ip && ip.includes(':')) {
       const parts = ip.split(':')
       ip = parts[0]
       port = parseInt(parts[1]) || 502
     }
 
-    const payload: WriteSingleRegisterRequestDto = {
+    // [UPDATED] ใช้ endpoint ที่ถูกต้องตาม Swagger
+    const payload = {
       remoteIP: ip,
       remotePort: port,
       unitIdentifier: info.unit_id,
@@ -213,7 +213,7 @@ export const modbusService = {
   /**
    * ทดสอบการเชื่อมต่อกับ Device
    */
-  async testConnection(deviceIp: string, port: number = 502, unitId: number): Promise<boolean> {
+  async testConnection(deviceIp: string, port: number, unitId: number): Promise<boolean> {
     try {
       // อ่าน Register 0 เพื่อทดสอบการเชื่อมต่อ
       const result = await this.readHoldingRegister(deviceIp, port, unitId, 0)

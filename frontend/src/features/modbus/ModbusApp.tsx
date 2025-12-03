@@ -143,14 +143,18 @@ export default function ModbusApp({ onBack }: ModbusAppProps) {
   }, [currentView, selectedDevice])
 
   // Handlers
-  const handleAddDevice = async (values: any) => {
+const handleAddDevice = async (values: any) => {
     try {
+      // [UPDATED] จัดการ Port ให้ถูกต้อง
+      const port = values.port || 502
+      const ipAddress = `${values.ip}:${port}`
+      
       await authFetch('/devices', { 
         method: 'POST', 
         body: JSON.stringify([{
           device_name: values.name, 
           device_instance_id: Math.floor(Math.random() * 100000),
-          ip_address: `${values.ip}:${values.port || 502}`,
+          ip_address: ipAddress,
           network_number: 0, 
           protocol: 'MODBUS', 
           unit_id: values.unitId
@@ -399,7 +403,8 @@ export default function ModbusApp({ onBack }: ModbusAppProps) {
                 ]} />
             </Card>
         )}
-        {currentView === 'logs' && <LogsPage />}
+        
+        {currentView === 'logs' && <LogsPage defaultProtocol="MODBUS" />}
 
         {/* Add Device Modal */}
         <Modal 

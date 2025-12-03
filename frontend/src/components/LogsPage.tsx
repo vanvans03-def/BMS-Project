@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // frontend/src/components/LogsPage.tsx
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -31,8 +32,12 @@ interface AuditLog {
   details: string
   protocol?: string // เพิ่ม field นี้
 }
+interface LogsPageProps {
+  defaultProtocol?: 'all' | 'BACNET' | 'MODBUS'
+}
 
-export const LogsPage = () => {
+
+export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [currentPage, setCurrentPage] = useState(1)
@@ -41,7 +46,6 @@ export const LogsPage = () => {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([dayjs(), dayjs()])
   const [userFilter, setUserFilter] = useState('all')
   const [actionFilter, setActionFilter] = useState('all')
-  // [UPDATED] 2. เพิ่ม State สำหรับกรอง Protocol
   const [protocolFilter, setProtocolFilter] = useState('all')
 
   useEffect(() => {

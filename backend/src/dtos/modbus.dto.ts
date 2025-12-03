@@ -60,3 +60,8 @@ export interface ReadCoilResponseDto {
 export interface ReadHoldingRegistersResponseDto {
   value: number // Raw Integer value
 }
+
+export interface WriteResponseDto {
+  success: boolean
+  message?: string
+}
