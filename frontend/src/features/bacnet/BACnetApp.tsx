@@ -262,7 +262,7 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
                     { key: 'general', label: <span><GlobalOutlined /> General</span>, children: <GeneralSettings /> },
                     { key: 'network', label: <span><ApiOutlined /> Network</span>, children: <NetworkSettings /> },
                     { key: 'users', label: <span><UserOutlined /> Users</span>, children: <UserSettings /> },
-                    { key: 'database', label: <span><DatabaseOutlined /> Database</span>, children: <DatabaseSettings /> },
+                    { key: 'database', label: <span><DatabaseOutlined /> Database</span>, children: <DatabaseSettings filterProtocol="BACNET" /> },
                 ]} />
             </Card>
         )}

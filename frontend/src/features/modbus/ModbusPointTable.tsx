@@ -109,9 +109,17 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
                     />
                 )
             } else {
+                let displayVal = Number(data.value)
+                let decimals = 0
+
+                if (record.register_type === 'HOLDING_REGISTER') {
+                    displayVal = displayVal / 100
+                    decimals = 2
+                }
+
                 content = (
                     <Text style={{ color: '#faad14', fontSize: 16 }}>
-                        <AnimatedNumber value={Number(data.value)} decimals={0} />
+                        <AnimatedNumber value={displayVal} decimals={decimals} />
                     </Text>
                 )
             }

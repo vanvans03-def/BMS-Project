@@ -1,28 +1,34 @@
 import axios from 'axios'
 import https from 'https'
 import { sql } from '../db'
+import { settingsService } from './settings.service' // [Import เพิ่ม]
 import type { 
   ReadCoilRequestDto, 
   ReadCoilResponseDto, 
   ReadHoldingRegistersRequestDto, 
-  ReadHoldingRegistersResponseDto,
-  WriteSingleCoilRequestDto,
-  WriteSingleRegisterRequestDto
+  ReadHoldingRegistersResponseDto
 } from '../dtos/modbus.dto'
 
+// ใช้ Config เริ่มต้น ถ้าหาใน DB ไม่เจอ
+const DEFAULT_TIMEOUT = 5000 
 const GATEWAY_API_URL = Bun.env.MODBUS_API_URL || 'https://localhost:7013'
 
 const client = axios.create({
   baseURL: GATEWAY_API_URL,
   httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-  timeout: 10000
+  // timeout: 10000 // [ลบออก] เราจะกำหนดตอนเรียกใช้แทน
 })
+
+// Helper function เพื่อดึง Timeout จาก Settings
+async function getClientConfig() {
+    const settings = await settingsService.getSettings()
+    // ดึงค่า modbus_timeout ถ้าไม่มีให้ใช้ DEFAULT_TIMEOUT
+    const timeout = Number(settings.modbus_timeout) || DEFAULT_TIMEOUT
+    return { timeout }
+}
 
 export const modbusService = {
   
-  /**
-   * อ่านค่า Coil (Boolean) จาก Device
-   */
   async readCoil(deviceIp: string, port: number, unitId: number, address: number): Promise<boolean | null> {
     try {
       const payload: ReadCoilRequestDto = {
@@ -35,7 +41,9 @@ export const modbusService = {
 
       console.log(`📖 [Modbus] Reading Coil: ${deviceIp}:${port} Unit:${unitId} Addr:${address}`)
       
-      const res = await client.post<ReadCoilResponseDto>('/read/coil', payload)
+      // [FIXED] ใส่ config ที่ดึงมา
+      const config = await getClientConfig()
+      const res = await client.post<ReadCoilResponseDto>('/read/coil', payload, config)
       
       if (res.data && res.data.values && res.data.values.length > 0) {
         return res.data.values[0] === 1
@@ -47,9 +55,6 @@ export const modbusService = {
     }
   },
 
-  /**
-   * อ่านค่า Holding Register (Word) จาก Device
-   */
   async readHoldingRegister(
     deviceIp: string, 
     port: number, 
@@ -67,7 +72,9 @@ export const modbusService = {
 
       console.log(`📖 [Modbus] Reading Register: ${deviceIp}:${port} Unit:${unitId} Addr:${address}`)
       
-      const res = await client.post<ReadHoldingRegistersResponseDto>('/read/registers', payload)
+      // [FIXED] ใส่ config ที่ดึงมา
+      const config = await getClientConfig()
+      const res = await client.post<ReadHoldingRegistersResponseDto>('/read/registers', payload, config)
       
       if (res.data && res.data.value !== undefined) {
         return res.data.value
@@ -79,9 +86,6 @@ export const modbusService = {
     }
   },
 
-  /**
-   * อ่านค่า Point โดยดึง Config จาก Database
-   */
   async readPointValue(pointId: number) {
     const [info] = await sql`
       SELECT 
@@ -94,7 +98,6 @@ export const modbusService = {
 
     if (!info) throw new Error('Modbus Point not found')
 
-    // แยก IP และ Port
     let ip = info.ip_address
     let port = 502
     if (ip && ip.includes(':')) {
@@ -103,7 +106,6 @@ export const modbusService = {
       port = parseInt(parts[1]) || 502
     }
 
-    // อ่านค่าตาม Register Type
     if (info.register_type === 'COIL') {
       return await this.readCoil(ip, port, info.unit_id, info.address)
     } 
@@ -113,7 +115,8 @@ export const modbusService = {
 
     return null
   },
-async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
+
+  async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
     const [info] = await sql`
       SELECT 
         p.object_instance as address, p.point_name,
@@ -125,7 +128,6 @@ async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
     
     if (!info) throw new Error('Point not found')
 
-    // แยก IP และ Port
     let ip = info.ip_address
     let port = 502
     if (ip && ip.includes(':')) {
@@ -134,7 +136,6 @@ async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
       port = parseInt(parts[1]) || 502
     }
 
-    // [UPDATED] ใช้ endpoint ที่ถูกต้องตาม Swagger
     const payload = {
       remoteIP: ip,
       remotePort: port,
@@ -145,9 +146,10 @@ async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
 
     console.log(`📝 [Modbus] Writing Coil:`, payload)
     
-    await client.post('/write/coil', payload)
+    // [FIXED] ใส่ config
+    const config = await getClientConfig()
+    await client.post('/write/coil', payload, config)
     
-    // บันทึก Audit Log
     const { auditLogService } = await import('./audit-log.service')
     await auditLogService.recordLog({
       user_name: userName,
@@ -160,9 +162,6 @@ async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
     return true
   },
 
-  /**
-   * เขียนค่า Holding Register (Number)
-   */
   async writeRegister(pointId: number, value: number, userName: string = 'System') {
     const [info] = await sql`
       SELECT 
@@ -175,7 +174,6 @@ async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
     
     if (!info) throw new Error('Point not found')
 
-    // แยก IP และ Port
     let ip = info.ip_address
     let port = 502
     if (ip && ip.includes(':')) {
@@ -184,7 +182,6 @@ async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
       port = parseInt(parts[1]) || 502
     }
 
-    // [UPDATED] ใช้ endpoint ที่ถูกต้องตาม Swagger
     const payload = {
       remoteIP: ip,
       remotePort: port,
@@ -195,9 +192,10 @@ async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
 
     console.log(`📝 [Modbus] Writing Register:`, payload)
     
-    await client.post('/write/register', payload)
+    // [FIXED] ใส่ config
+    const config = await getClientConfig()
+    await client.post('/write/register', payload, config)
     
-    // บันทึก Audit Log
     const { auditLogService } = await import('./audit-log.service')
     await auditLogService.recordLog({
       user_name: userName,
@@ -210,12 +208,9 @@ async writeCoil(pointId: number, value: boolean, userName: string = 'System') {
     return true
   },
 
-  /**
-   * ทดสอบการเชื่อมต่อกับ Device
-   */
   async testConnection(deviceIp: string, port: number, unitId: number): Promise<boolean> {
     try {
-      // อ่าน Register 0 เพื่อทดสอบการเชื่อมต่อ
+      // ใช้ readHoldingRegister ซึ่งเราแก้ให้รับ config แล้ว
       const result = await this.readHoldingRegister(deviceIp, port, unitId, 0)
       return result !== null
     } catch {

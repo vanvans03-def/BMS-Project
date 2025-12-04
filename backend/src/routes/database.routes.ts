@@ -4,8 +4,12 @@ import { databaseService } from '../services/database.service'
 export const databaseRoutes = new Elysia({ prefix: '/database' })
 
   // 1. GET /database/stats - ดึงสถิติระบบ
-  .get('/stats', async () => {
-    return await databaseService.getSystemStats()
+  .get('/stats', async ({ query }) => {
+    return await databaseService.getSystemStats(query.protocol)
+  }, {
+    query: t.Object({
+      protocol: t.Optional(t.String())
+    })
   })
 
   // 2. POST /database/clear-all - ลบข้อมูลทั้งหมด (ระวัง!)

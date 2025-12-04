@@ -17,6 +17,9 @@ import { authFetch } from '../utils/authFetch'
 import AOS from 'aos'
 
 const { Title, Text } = Typography
+interface DatabaseSettingsProps {
+    filterProtocol?: 'all' | 'BACNET' | 'MODBUS'
+}
 
 // ================================
 // 1. GENERAL SETTINGS
@@ -595,7 +598,7 @@ export const UserSettings = () => {
 // ================================
 // 4. DATABASE SETTINGS
 // ================================
-export const DatabaseSettings = () => {
+export const DatabaseSettings = ({ filterProtocol = 'all' }: DatabaseSettingsProps) => {
     const [stats, setStats] = useState<any>({})
     const [loading, setLoading] = useState(false)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -610,7 +613,11 @@ export const DatabaseSettings = () => {
     const loadStats = async () => {
         setLoading(true)
         try {
-            const res = await authFetch('/database/stats')
+            const url = filterProtocol === 'all'
+                ? '/database/stats'
+                : `/database/stats?protocol=${filterProtocol}`
+
+            const res = await authFetch(url)
             const data = await res.json()
             setStats(data)
         } catch (err) {
@@ -645,7 +652,10 @@ export const DatabaseSettings = () => {
         try {
             const res = await authFetch('/database/clear-all', {
                 method: 'POST',
-                body: JSON.stringify({ confirmText })
+                body: JSON.stringify({
+                    confirmText,
+                    protocol: filterProtocol === 'all' ? undefined : filterProtocol
+                })
             })
 
             const data = await res.json()
@@ -751,8 +761,8 @@ export const DatabaseSettings = () => {
             <div data-aos="fade-up" data-aos-delay="600">
                 <Title level={5} type="danger">Danger Zone</Title>
                 <Alert
-                    message="Factory Reset"
-                    description="Delete all devices and points permanently"
+                    message={`Factory Reset (${filterProtocol === 'all' ? 'System Wide' : filterProtocol})`}
+                    description={`Delete all ${filterProtocol === 'all' ? '' : filterProtocol} devices and points permanently`}
                     type="error"
                     showIcon
                     action={
