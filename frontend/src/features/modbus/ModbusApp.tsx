@@ -404,7 +404,7 @@ const handleAddDevice = async (values: any) => {
             </Card>
         )}
         
-        {currentView === 'logs' && <LogsPage defaultProtocol="MODBUS" />}
+        {currentView === 'logs' && <LogsPage context="MODBUS" />}
 
         {/* Add Device Modal */}
         <Modal 

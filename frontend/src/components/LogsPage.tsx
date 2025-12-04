@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// frontend/src/components/LogsPage.tsx
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
@@ -22,7 +21,6 @@ import { authFetch } from '../utils/authFetch'
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
-// [UPDATED] 1. เพิ่ม protocol ใน Interface
 interface AuditLog {
   id: number
   timestamp: string
@@ -30,14 +28,14 @@ interface AuditLog {
   action_type: 'WRITE' | 'SETTING' | 'USER'
   target_name: string
   details: string
-  protocol?: string // เพิ่ม field นี้
+  protocol?: string
 }
+
 interface LogsPageProps {
-  defaultProtocol?: 'all' | 'BACNET' | 'MODBUS'
+  context?: 'all' | 'BACNET' | 'MODBUS'
 }
 
-
-export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
+export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [currentPage, setCurrentPage] = useState(1)
@@ -46,12 +44,14 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([dayjs(), dayjs()])
   const [userFilter, setUserFilter] = useState('all')
   const [actionFilter, setActionFilter] = useState('all')
+  
+  // State สำหรับ Dropdown เลือก System (ใช้เฉพาะเมื่อ context === 'all')
   const [protocolFilter, setProtocolFilter] = useState('all')
 
   useEffect(() => {
     AOS.refresh()
     fetchLogs()
-  }, [])
+  }, []) // context เปลี่ยนไม่ต้อง fetch ใหม่เพราะปกติจะ mount ใหม่ตาม route อยู่แล้ว
 
   const fetchLogs = async () => {
     setLoading(true)
@@ -66,8 +66,19 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
       if (userFilter !== 'all') params.append('user', userFilter)
       if (actionFilter !== 'all') params.append('actionType', actionFilter)
       
-      // [UPDATED] 3. ส่งค่า protocol ไปยัง Backend
-      if (protocolFilter !== 'all') params.append('protocols', protocolFilter)
+      // -----------------------------------------------------------
+      // [UPDATED] Logic การกรอง Protocol ตาม Context
+      // -----------------------------------------------------------
+      if (context === 'all') {
+         if (protocolFilter !== 'all') {
+             params.append('protocols', protocolFilter)
+         }
+      } else {
+         // กรณีเข้าผ่าน App ย่อย: บังคับส่ง Protocol ของตัวเอง + ALL
+         // (Backend ต้องรองรับการส่งค่าแบบ comma separated เช่น "BACNET,ALL")
+         params.append('protocols', `${context},ALL`)
+      }
+      // -----------------------------------------------------------
 
       const res = await authFetch(`/audit-logs?${params.toString()}`)
       if (!res.ok) throw new Error('Failed to fetch logs')
@@ -83,7 +94,6 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
     }
   }
 
-  // [UPDATED] 4. ปรับปรุง Export ให้รวม Protocol ด้วย
   const handleExport = () => {
     if (logs.length === 0) {
       message.warning('No data to export')
@@ -101,7 +111,7 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
         return {
             ID: log.id,
             Time: dayjs(log.timestamp).format('DD/MM/YYYY HH:mm:ss'),
-            System: log.protocol || 'ALL', // เพิ่ม Column System
+            System: log.protocol || 'ALL',
             User: log.user_name,
             Action: log.action_type,
             Target: cleanTarget,
@@ -111,11 +121,10 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
 
     const ws = XLSX.utils.json_to_sheet(dataToExport)
 
-    // ปรับความกว้างคอลัมน์
     ws['!cols'] = [
         { wch: 8 },   // ID
         { wch: 20 },  // Time
-        { wch: 10 },  // System (New)
+        { wch: 10 },  // System
         { wch: 15 },  // User
         { wch: 12 },  // Action
         { wch: 30 },  // Target
@@ -178,7 +187,6 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
     return <Text>{(name || '').replace('OBJECT_', '').replace(/_/g, ' ')}</Text>
   }
 
-  // [UPDATED] 5. เพิ่มคอลัมน์ System ในตาราง
   const columns: ColumnsType<AuditLog> = [
     {
       title: 'Time',
@@ -235,7 +243,7 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
         let color = 'default'
         let icon = <FileTextOutlined />
         
-        if (action === 'WRITE') { color = 'purple'; icon = <EditOutlined /> } // เปลี่ยนสีเล็กน้อยให้ไม่ซ้ำ Modbus
+        if (action === 'WRITE') { color = 'purple'; icon = <EditOutlined /> }
         if (action === 'SETTING') { color = 'blue'; icon = <SettingOutlined /> }
         if (action === 'USER') { color = 'green'; icon = <UserOutlined /> }
 
@@ -283,9 +291,13 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
     <>
         <div style={{ marginBottom: 24 }} data-aos="fade-down">
             <Title level={3} style={{ margin: 0, marginBottom: 8 }}>
-              <FileTextOutlined /> System Audit Logs
+              <FileTextOutlined /> {context === 'all' ? 'Central Logs' : `${context} Logs`}
             </Title>
-            <Text type="secondary">Track BACnet and Modbus activities</Text>
+            <Text type="secondary">
+              {context === 'all' 
+                ? 'Track all system activities across BACnet and Modbus' 
+                : `View logs specific to ${context} system`}
+            </Text>
         </div>
 
         <div data-aos="fade-up" data-aos-delay="100">
@@ -305,20 +317,22 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
                         />
                     </Col>
                     
-                    {/* [UPDATED] 6. เพิ่ม Dropdown เลือก System */}
-                    <Col xs={12} md={4} lg={3}>
-                        <Text strong>System</Text>
-                        <Select 
-                            value={protocolFilter}
-                            onChange={setProtocolFilter}
-                            style={{ width: '100%', marginTop: 8 }}
-                            options={[
-                                { value: 'all', label: 'All Systems' },
-                                { value: 'BACNET', label: 'BACnet' },
-                                { value: 'MODBUS', label: 'Modbus' },
-                            ]}
-                        />
-                    </Col>
+                    {/* [UPDATED] แสดง Dropdown เลือก System เฉพาะเมื่อ Context เป็น 'all' */}
+                    {context === 'all' && (
+                        <Col xs={12} md={4} lg={3}>
+                            <Text strong>System</Text>
+                            <Select 
+                                value={protocolFilter}
+                                onChange={setProtocolFilter}
+                                style={{ width: '100%', marginTop: 8 }}
+                                options={[
+                                    { value: 'all', label: 'All Systems' },
+                                    { value: 'BACNET', label: 'BACnet' },
+                                    { value: 'MODBUS', label: 'Modbus' },
+                                ]}
+                            />
+                        </Col>
+                    )}
 
                     <Col xs={12} md={4} lg={3}>
                         <Text strong>User</Text>
@@ -346,7 +360,7 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
                             ]}
                         />
                     </Col>
-                    <Col xs={24} md={6} lg={10} style={{ textAlign: 'right' }}>
+                    <Col xs={24} md={6} lg={context === 'all' ? 10 : 13} style={{ textAlign: 'right' }}>
                         <Space>
                             <Button type="primary" icon={<SearchOutlined />} onClick={fetchLogs} loading={loading}>
                                 Search
