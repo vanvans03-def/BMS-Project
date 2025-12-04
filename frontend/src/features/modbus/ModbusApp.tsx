@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect } from 'react'
-import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Statistic, Tabs, Popconfirm } from 'antd'
+import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Statistic, Tabs } from 'antd'
 import { 
   ReloadOutlined, PlusOutlined, DatabaseOutlined, 
   HddOutlined, ThunderboltOutlined, ArrowLeftOutlined, 
-  GlobalOutlined, ApiOutlined, UserOutlined, SaveOutlined,
-  DeleteOutlined
+  GlobalOutlined, ApiOutlined, UserOutlined, SaveOutlined
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import AOS from 'aos'
@@ -127,9 +126,13 @@ export default function ModbusApp({ onBack }: ModbusAppProps) {
               body: JSON.stringify({ deviceId: selectedDevice.id }) 
             })
             const data = await res.json()
+            
             if (data.success && data.values) {
                 const map = new Map()
-                data.values.forEach((v: PointValue) => map.set(v.pointId, v))
+                // รับค่า Raw Data มาตรงๆ (2500)
+                data.values.forEach((v: PointValue) => {
+                    map.set(v.pointId, v)
+                })
                 setPointValues(map)
             }
         } catch (err) {
@@ -142,10 +145,19 @@ export default function ModbusApp({ onBack }: ModbusAppProps) {
     return () => clearInterval(interval)
   }, [currentView, selectedDevice])
 
+  // [NEW] Helper Function สำหรับแปลงค่า Raw เป็นค่าทศนิยมเพื่อแสดงผล
+  const getScaledValue = (point: Point | null, rawValue: any) => {
+      if (!point || typeof rawValue !== 'number') return rawValue
+      
+      if (point.data_format === 'TEMP_C_100') return rawValue / 100
+      if (point.data_format === 'TEMP_C_10') return rawValue / 10
+      
+      return rawValue
+  }
+
   // Handlers
-const handleAddDevice = async (values: any) => {
+  const handleAddDevice = async (values: any) => {
     try {
-      // [UPDATED] จัดการ Port ให้ถูกต้อง
       const port = values.port || 502
       const ipAddress = `${values.ip}:${port}`
       
@@ -180,7 +192,8 @@ const handleAddDevice = async (values: any) => {
           pointName: values.name,
           registerType: values.registerType,
           address: values.address,
-          dataType: values.dataType || 'INT16'
+          dataType: values.dataType || 'INT16',
+          dataFormat: values.dataFormat || 'RAW'
         })
       })
       
@@ -230,9 +243,22 @@ const handleAddDevice = async (values: any) => {
         ? '/modbus/write-coil' 
         : '/modbus/write-register'
       
-      const value = writingPoint.register_type === 'COIL'
+      let value: number | boolean = writingPoint.register_type === 'COIL'
         ? (writeValue === 1 || writeValue === 'true')
         : Number(writeValue)
+
+      // จัดการค่า Holding Register (ตัวเลข)
+      if (writingPoint.register_type === 'HOLDING_REGISTER' && typeof value === 'number') {
+          // Scaling: แปลงจากทศนิยมกลับเป็นจำนวนเต็ม (20.5 -> 2050)
+          switch (writingPoint.data_format) {
+              case 'TEMP_C_100':
+                  value = Math.round(value * 100)
+                  break
+              case 'TEMP_C_10':
+                  value = Math.round(value * 10)
+                  break
+          }
+      }
       
       const res = await authFetch(endpoint, {
         method: 'POST',
@@ -370,7 +396,11 @@ const handleAddDevice = async (values: any) => {
               onWrite={(p: Point) => { 
                 setWritingPoint(p)
                 const currentVal = pointValues.get(p.id)?.value
-                setWriteValue(currentVal ?? "")
+                
+                // [FIXED] แปลงค่า Raw เป็นทศนิยมก่อนนำไปใส่ใน Input ของ Modal
+                const scaledVal = getScaledValue(p, currentVal)
+                
+                setWriteValue(scaledVal ?? "")
                 setIsWriteModalOpen(true) 
               }}
               onDelete={handleDeletePoint}
@@ -404,7 +434,7 @@ const handleAddDevice = async (values: any) => {
             </Card>
         )}
         
-        {currentView === 'logs' && <LogsPage context="MODBUS" />}
+        {currentView === 'logs' && <LogsPage defaultProtocol="MODBUS" />}
 
         {/* Add Device Modal */}
         <Modal 
@@ -461,6 +491,7 @@ const handleAddDevice = async (values: any) => {
                 >
                   <Input placeholder="e.g. Temperature Sensor" />
                 </Form.Item>
+                
                 <Form.Item 
                   name="registerType" 
                   label="Register Type" 
@@ -472,6 +503,7 @@ const handleAddDevice = async (values: any) => {
                     <Select.Option value="HOLDING_REGISTER">Holding Register (Number)</Select.Option>
                   </Select>
                 </Form.Item>
+
                 <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item 
@@ -483,16 +515,35 @@ const handleAddDevice = async (values: any) => {
                     </Form.Item>
                   </Col>
                   <Col span={12}>
-                    <Form.Item name="dataType" label="Data Type" initialValue="INT16">
+                    <Form.Item 
+                        name="dataType" 
+                        label="Data Type" 
+                        initialValue="INT16"
+                        tooltip="INT16 for signed values (-32768 to 32767), UINT16 for unsigned (0 to 65535)"
+                    >
                       <Select>
+                        <Select.Option value="INT16">INT16 (Signed)</Select.Option>
+                        <Select.Option value="UINT16">UINT16 (Unsigned)</Select.Option>
                         <Select.Option value="BOOL">Boolean</Select.Option>
-                        <Select.Option value="INT16">Int16</Select.Option>
-                        <Select.Option value="UINT16">UInt16</Select.Option>
-                        <Select.Option value="FLOAT32">Float32</Select.Option>
                       </Select>
                     </Form.Item>
                   </Col>
                 </Row>
+
+                <Form.Item 
+                    name="dataFormat" 
+                    label="Display Format" 
+                    initialValue="RAW"
+                    tooltip="Choose how to display the value"
+                >
+                    <Select>
+                        <Select.Option value="RAW">Raw Data (Default)</Select.Option>
+                        <Select.Option value="TEMP_C_100">Temperature °C (÷100)</Select.Option>
+                        <Select.Option value="TEMP_C_10">Temperature °C (÷10)</Select.Option>
+                        <Select.Option value="VOLT_V">Voltage (V)</Select.Option>
+                    </Select>
+                </Form.Item>
+
                 <Button type="primary" htmlType="submit" block>Add Point</Button>
             </Form>
         </Modal>
@@ -501,7 +552,8 @@ const handleAddDevice = async (values: any) => {
         <WriteValueModal 
           open={isWriteModalOpen} 
           point={writingPoint} 
-          currentValue={pointValues.get(writingPoint?.id || 0)?.value} 
+          // [FIXED] แสดงค่า Current Value ใน Modal แบบที่แปลงหน่วยแล้ว
+          currentValue={getScaledValue(writingPoint, pointValues.get(writingPoint?.id || 0)?.value)} 
           writeValue={writeValue} 
           priority={0}
           loading={isWriting} 

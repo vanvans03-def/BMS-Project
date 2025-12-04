@@ -23,6 +23,13 @@ async function migrate() {
       ALTER TABLE audit_logs 
       ADD COLUMN IF NOT EXISTS protocol VARCHAR(50);
     `
+    console.log('📦 Altering table: points')
+    await sql`
+      ALTER TABLE points 
+      ADD COLUMN IF NOT EXISTS register_type VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS data_type VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS data_format VARCHAR(50);
+    `
 
     console.log('✅ Migration Completed Successfully!')
   } catch (error) {

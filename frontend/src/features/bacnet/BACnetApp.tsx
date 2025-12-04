@@ -266,7 +266,7 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
                 ]} />
             </Card>
         )}
-        {currentView === 'logs' && <LogsPage context="BACNET" />}
+        {currentView === 'logs' && <LogsPage defaultProtocol="BACNET" />}
 
         <DiscoveryModal open={isDiscoveryModalOpen} loading={isScanning} adding={isAdding} devices={discoveredDevices} selectedRows={selectedDiscoveryRows} existingDeviceIds={existingDeviceIds} onClose={() => setIsDiscoveryModalOpen(false)} onAdd={handleAddSelected} onSelectionChange={setSelectedDiscoveryRows} />
         <WriteValueModal open={isWriteModalOpen} point={writingPoint} currentValue={pointValues.get(writingPoint?.id||0)?.value} writeValue={writeValue} priority={writePriority} loading={isWriting} onClose={() => setIsWriteModalOpen(false)} onWrite={handleWrite} onValueChange={setWriteValue} onPriorityChange={setWritePriority} />

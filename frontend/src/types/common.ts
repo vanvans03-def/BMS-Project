@@ -19,6 +19,7 @@ export interface Point {
   is_monitor: boolean
   register_type?: string
   data_type?: string
+  data_format?: string
 }
 
 export interface PointValue {

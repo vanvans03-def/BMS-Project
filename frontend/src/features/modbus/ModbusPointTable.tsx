@@ -2,10 +2,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Table, Tag, Button, Typography, Badge, Space, Popconfirm } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { EditOutlined, ThunderboltOutlined, NumberOutlined, DeleteOutlined } from '@ant-design/icons'
+import { 
+  EditOutlined, 
+  ThunderboltOutlined, 
+  NumberOutlined, 
+  DeleteOutlined 
+} from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import { AnimatedNumber } from '../../components/AnimatedNumber'
 
+// ต้องแน่ใจว่า Type Point ใน types/common.ts เพิ่ม data_format แล้ว
 import type { Point, PointValue } from '../../types/common'
 
 const { Text } = Typography
@@ -21,10 +27,12 @@ interface Props {
 export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDelete }: Props) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
+  
+  // Pagination State
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  // ตรวจจับการเปลี่ยนแปลงค่า
+  // Effect: ตรวจจับการเปลี่ยนแปลงค่าเพื่อทำ Animation Highlight
   useEffect(() => {
     const newUpdated = new Set<number>()
 
@@ -47,7 +55,7 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       title: 'Type',
       dataIndex: 'register_type',
       key: 'type',
-      width: 150,
+      width: 140,
       render: (type: string | undefined) => {
         let color = 'default'
         let icon = <NumberOutlined />
@@ -72,7 +80,8 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       title: 'Address',
       dataIndex: 'object_instance',
       key: 'address',
-      width: 100,
+      width: 90,
+      align: 'center',
       render: (val) => <Text code>{val}</Text>
     },
     {
@@ -82,17 +91,23 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       render: (text) => <Text strong>{text}</Text>
     },
     {
-      title: 'Data Type',
-      dataIndex: 'data_type',
-      key: 'data_type',
-      width: 100,
+      title: 'Format', // [NEW] แสดง Format ที่เลือก
+      dataIndex: 'data_format',
+      key: 'format',
+      width: 120,
       responsive: ['lg'],
-      render: (type) => <Tag>{type || 'INT16'}</Tag>
+      render: (fmt) => {
+          if (!fmt || fmt === 'RAW') return <Tag>Raw</Tag>
+          if (fmt === 'TEMP_C_100') return <Tag color="orange">Temp ÷100</Tag>
+          if (fmt === 'TEMP_C_10') return <Tag color="orange">Temp ÷10</Tag>
+          if (fmt === 'VOLT_V') return <Tag color="cyan">Voltage</Tag>
+          return <Tag>{fmt}</Tag>
+      }
     },
     {
       title: 'Value',
       key: 'value',
-      width: 150,
+      width: 160,
       render: (_, record) => {
         const data = pointValues.get(record.id)
         const isUpdated = updatedPoints.has(record.id)
@@ -100,6 +115,7 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
         let content = <Badge status="default" text="-" />
 
         if (data) {
+            // Case 1: COIL (Boolean)
             if (record.register_type === 'COIL') {
                 const isOn = data.value === true || data.value === 1 || data.value === 'true'
                 content = (
@@ -108,20 +124,49 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
                       text={isOn ? 'ON' : 'OFF'} 
                     />
                 )
-            } else {
+            } 
+            // Case 2: Holding Register (Number)
+            else {
                 let displayVal = Number(data.value)
                 let decimals = 0
+                let suffix = ''
 
-                if (record.register_type === 'HOLDING_REGISTER') {
-                    displayVal = displayVal / 100
-                    decimals = 2
+                // [UPDATED] Logic การแปลงค่าตาม Format ที่เลือก
+                switch (record.data_format) {
+                    case 'TEMP_C_100': // กรณี 2050 -> 20.50
+                        displayVal = displayVal / 100
+                        decimals = 2
+                        suffix = ' °C'
+                        break
+                    case 'TEMP_C_10': // กรณี 205 -> 20.5
+                        displayVal = displayVal / 10
+                        decimals = 1
+                        suffix = ' °C'
+                        break
+                    case 'VOLT_V': // แสดงหน่วย V
+                        suffix = ' V'
+                        break
+                    default: // RAW หรืออื่นๆ
+                        break
                 }
 
-                content = (
-                    <Text style={{ color: '#faad14', fontSize: 16 }}>
-                        <AnimatedNumber value={displayVal} decimals={decimals} />
-                    </Text>
-                )
+                // ถ้าค่าไม่ใช่ตัวเลข (เช่น Error หรือ null)
+                if (isNaN(displayVal)) {
+                    content = <Text type="secondary">Error</Text>
+                } else {
+                    content = (
+                        <div style={{ display: 'flex', alignItems: 'baseline' }}>
+                            <Text style={{ color: '#faad14', fontSize: 16, fontWeight: 500 }}>
+                                <AnimatedNumber value={displayVal} decimals={decimals} />
+                            </Text>
+                            {suffix && (
+                                <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
+                                    {suffix}
+                                </Text>
+                            )}
+                        </div>
+                    )
+                }
             }
         }
 

@@ -55,7 +55,7 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
    * เพิ่ม Point ใหม่สำหรับ Modbus Device
    */
   .post('/add-point', async ({ body, request }) => {
-    const { deviceId, pointName, registerType, address, dataType } = body
+    const { deviceId, pointName, registerType, address, dataType, dataFormat } = body
     const userName = getActorName(request)
     
     try {
@@ -69,13 +69,13 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
         return { success: false, message: 'Point at this address already exists' }
       }
 
-      const [newPoint] = await sql`
+        const [newPoint] = await sql`
         INSERT INTO points (
           device_id, object_type, object_instance, point_name, 
-          register_type, data_type, is_monitor
+          register_type, data_type, data_format, is_monitor -- [UPDATED] เพิ่ม data_format
         ) VALUES (
           ${deviceId}, 'MODBUS_POINT', ${address}, ${pointName},
-          ${registerType}, ${dataType || 'INT16'}, true
+          ${registerType}, ${dataType || 'INT16'}, ${dataFormat || 'RAW'}, true
         )
         RETURNING *
       `
@@ -104,7 +104,8 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
       pointName: t.String(),
       registerType: t.String(),
       address: t.Number(),
-      dataType: t.Optional(t.String())
+      dataType: t.Optional(t.String()),
+      dataFormat: t.Optional(t.String())
     })
   })
 

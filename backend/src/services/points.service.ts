@@ -8,8 +8,21 @@ class PointsService {
 
   async getPointsByDeviceId(deviceId: number): Promise<Point[]> {
     const result = await sql`
-      SELECT id, device_id, object_type, object_instance, point_name, description, is_monitor, created_at
-      FROM points WHERE device_id = ${deviceId} ORDER BY object_type, object_instance
+      SELECT 
+        id, 
+        device_id, 
+        object_type, 
+        object_instance, 
+        point_name, 
+        description, 
+        is_monitor, 
+        created_at,
+        register_type, 
+        data_type,
+        data_format 
+      FROM points 
+      WHERE device_id = ${deviceId} 
+      ORDER BY object_type, object_instance
     `
     return Array.from(result) as Point[]
   }

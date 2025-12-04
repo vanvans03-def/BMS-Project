@@ -32,10 +32,10 @@ interface AuditLog {
 }
 
 interface LogsPageProps {
-  context?: 'all' | 'BACNET' | 'MODBUS'
+  defaultProtocol?: 'all' | 'BACNET' | 'MODBUS'
 }
 
-export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
+export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [currentPage, setCurrentPage] = useState(1)
@@ -44,14 +44,27 @@ export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([dayjs(), dayjs()])
   const [userFilter, setUserFilter] = useState('all')
   const [actionFilter, setActionFilter] = useState('all')
-  
-  // State สำหรับ Dropdown เลือก System (ใช้เฉพาะเมื่อ context === 'all')
-  const [protocolFilter, setProtocolFilter] = useState('all')
+  const [protocolFilter, setProtocolFilter] = useState(defaultProtocol)
+
+  const [userList, setUserList] = useState<any[]>([])
 
   useEffect(() => {
     AOS.refresh()
     fetchLogs()
-  }, []) // context เปลี่ยนไม่ต้อง fetch ใหม่เพราะปกติจะ mount ใหม่ตาม route อยู่แล้ว
+    fetchUsers()
+  }, [])
+
+  const fetchUsers = async () => {
+    try {
+      const res = await authFetch('/users')
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setUserList(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch users:', error)
+    }
+  }
 
   const fetchLogs = async () => {
     setLoading(true)
@@ -66,19 +79,11 @@ export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
       if (userFilter !== 'all') params.append('user', userFilter)
       if (actionFilter !== 'all') params.append('actionType', actionFilter)
       
-      // -----------------------------------------------------------
-      // [UPDATED] Logic การกรอง Protocol ตาม Context
-      // -----------------------------------------------------------
-      if (context === 'all') {
-         if (protocolFilter !== 'all') {
-             params.append('protocols', protocolFilter)
-         }
+      if (defaultProtocol === 'all') {
+         if (protocolFilter !== 'all') params.append('protocols', protocolFilter)
       } else {
-         // กรณีเข้าผ่าน App ย่อย: บังคับส่ง Protocol ของตัวเอง + ALL
-         // (Backend ต้องรองรับการส่งค่าแบบ comma separated เช่น "BACNET,ALL")
-         params.append('protocols', `${context},ALL`)
+         params.append('protocols', `${defaultProtocol},ALL`)
       }
-      // -----------------------------------------------------------
 
       const res = await authFetch(`/audit-logs?${params.toString()}`)
       if (!res.ok) throw new Error('Failed to fetch logs')
@@ -122,13 +127,13 @@ export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
     const ws = XLSX.utils.json_to_sheet(dataToExport)
 
     ws['!cols'] = [
-        { wch: 8 },   // ID
-        { wch: 20 },  // Time
-        { wch: 10 },  // System
-        { wch: 15 },  // User
-        { wch: 12 },  // Action
-        { wch: 30 },  // Target
-        { wch: 100 }  // Details
+        { wch: 8 },
+        { wch: 20 },
+        { wch: 10 },
+        { wch: 15 },
+        { wch: 12 },
+        { wch: 30 },
+        { wch: 100 }
     ]
 
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
@@ -291,12 +296,12 @@ export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
     <>
         <div style={{ marginBottom: 24 }} data-aos="fade-down">
             <Title level={3} style={{ margin: 0, marginBottom: 8 }}>
-              <FileTextOutlined /> {context === 'all' ? 'Central Logs' : `${context} Logs`}
+              <FileTextOutlined /> {defaultProtocol === 'all' ? 'Central Logs' : `${defaultProtocol} Logs`}
             </Title>
             <Text type="secondary">
-              {context === 'all' 
+              {defaultProtocol === 'all' 
                 ? 'Track all system activities across BACnet and Modbus' 
-                : `View logs specific to ${context} system`}
+                : `View logs specific to ${defaultProtocol} system`}
             </Text>
         </div>
 
@@ -317,8 +322,7 @@ export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
                         />
                     </Col>
                     
-                    {/* [UPDATED] แสดง Dropdown เลือก System เฉพาะเมื่อ Context เป็น 'all' */}
-                    {context === 'all' && (
+                    {defaultProtocol === 'all' && (
                         <Col xs={12} md={4} lg={3}>
                             <Text strong>System</Text>
                             <Select 
@@ -340,9 +344,12 @@ export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
                             value={userFilter}
                             onChange={setUserFilter}
                             style={{ width: '100%', marginTop: 8 }}
+                            // [FIXED] กรองเฉพาะ Active User และ Map ข้อมูล
                             options={[
                                 { value: 'all', label: 'All Users' },
-                                { value: 'Admin', label: 'Admin' },
+                                ...userList
+                                    .filter(u => u.is_active) 
+                                    .map(u => ({ value: u.username, label: u.username }))
                             ]}
                         />
                     </Col>
@@ -360,7 +367,7 @@ export const LogsPage = ({ context = 'all' }: LogsPageProps) => {
                             ]}
                         />
                     </Col>
-                    <Col xs={24} md={6} lg={context === 'all' ? 10 : 13} style={{ textAlign: 'right' }}>
+                    <Col xs={24} md={6} lg={defaultProtocol === 'all' ? 10 : 13} style={{ textAlign: 'right' }}>
                         <Space>
                             <Button type="primary" icon={<SearchOutlined />} onClick={fetchLogs} loading={loading}>
                                 Search
