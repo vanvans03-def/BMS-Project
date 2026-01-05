@@ -8,6 +8,7 @@ export interface Device {
   protocol?: 'BACNET' | 'MODBUS'
   unit_id?: number
   is_active?: boolean
+  polling_interval?: number | null
 }
 
 export interface Point {
