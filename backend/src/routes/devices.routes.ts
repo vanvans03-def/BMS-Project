@@ -4,19 +4,16 @@ import type { CreateDeviceDto } from '../dtos/bacnet.dto'
 
 export const devicesRoutes = new Elysia({ prefix: '/devices' })
   
-  // 1. ดึงรายการอุปกรณ์
   .get('/', async () => {
     return await devicesService.getAllDevices()
   })
 
-  // 2. สแกนหาอุปกรณ์ BACnet
   .get('/discover', async () => {
     return await devicesService.discoverDevices()
   })
 
-  // 3. เพิ่มอุปกรณ์ลง Database
   .post('/', async ({ body }) => {
-    return await devicesService.addDevices(body as CreateDeviceDto[])
+    return await devicesService.addDevices(body as any[])
   }, {
     body: t.Array(t.Object({
         device_name: t.String(),
@@ -24,11 +21,21 @@ export const devicesRoutes = new Elysia({ prefix: '/devices' })
         ip_address: t.String(),
         network_number: t.Optional(t.Number()),
         protocol: t.Optional(t.String()),
-        unit_id: t.Optional(t.Number())
+        unit_id: t.Optional(t.Number()),
+        polling_interval: t.Optional(t.Nullable(t.Number()))
     }))
   })
 
-  // 4. [NEW] ลบอุปกรณ์ (รองรับทั้ง BACnet และ Modbus)
+  // [NEW] Route สำหรับอัปเดตอุปกรณ์
+  .put('/:id', async ({ params, body }) => {
+    return await devicesService.updateDevice(Number(params.id), body)
+  }, {
+    body: t.Object({
+      device_name: t.Optional(t.String()),
+      polling_interval: t.Optional(t.Nullable(t.Number())) // รองรับ null ได้
+    })
+  })
+
   .delete('/:id', async ({ params }) => {
     return await devicesService.deleteDevice(Number(params.id))
   })

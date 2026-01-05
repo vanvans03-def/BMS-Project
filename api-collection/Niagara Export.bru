@@ -1,0 +1,19 @@
+meta {
+  name: Niagara Export
+  type: http
+  seq: 1
+}
+
+get {
+  url: http://localhost:3000/integration/niagara/export?protocol=MODBUS
+  body: none
+  auth: none
+}
+
+params:query {
+  protocol: MODBUS
+}
+
+headers {
+  x-api-key: niagara-secret-key-2025
+}
