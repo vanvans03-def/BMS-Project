@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState } from 'react'
 import { Form, Input, Button, Card, Typography, Layout, theme } from 'antd'
 import { UserOutlined, LockOutlined, DatabaseOutlined } from '@ant-design/icons'
 import { useAuth } from '../contexts/AuthContext'
+import { ParticleBackground } from '../components/ParticleBackground' // ตรวจสอบ path ให้ถูกนะครับ
 
 const { Title, Text } = Typography
 const { Content, Footer } = Layout
@@ -20,15 +22,21 @@ export const LoginPage = () => {
   }
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      {/* 1. Header (Optional: ให้เหมือน Navbar ด้านใน แต่โล่งๆ) */}
+    <Layout style={{ minHeight: '100vh', background: '#f0f2f5', position: 'relative' }}>
+      
+      {/* Background: เลือก shape ได้ตามใจชอบ (circle, square, hexagon, triangle, mixed) */}
+      <ParticleBackground shape="circle" />
+
+      {/* Header */}
       <div 
         style={{
             height: 64,
             display: 'flex',
             alignItems: 'center',
             padding: '0 50px',
-            background: '#001529', // สีเดียวกับ Header ด้านใน
+            background: '#001529',
+            zIndex: 10,
+            position: 'relative'
         }}
       >
          <div style={{ display: 'flex', alignItems: 'center', color: 'white' }}>
@@ -43,23 +51,35 @@ export const LoginPage = () => {
             justifyContent: 'center', 
             alignItems: 'center',
             flexDirection: 'column',
-            padding: '50px 0'
+            padding: '50px 0',
+            zIndex: 10, 
+            position: 'relative'
         }}
       >
-        {/* Logo & Title Area */}
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-            <DatabaseOutlined style={{ fontSize: 48, color: '#1890ff' }} />
-            <Title level={2} style={{ margin: '16px 0 8px' }}>Sign in to BMS</Title>
+        {/* --- เพิ่ม id="login-title-section" เพื่อทำเป็นกำแพง --- */}
+        <div id="login-title-section" style={{ textAlign: 'center', marginBottom: 40 }}>
+            <div style={{ 
+                background: 'white', 
+                padding: 16, 
+                borderRadius: '50%', 
+                display: 'inline-block',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+            }}>
+                <DatabaseOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+            </div>
+            <Title level={2} style={{ margin: '16px 0 8px', color: '#001529' }}>Sign in to BMS</Title>
             <Text type="secondary">Building Management System Dashboard</Text>
         </div>
 
-        {/* Login Card */}
+        {/* --- id="login-card" เพื่อทำเป็นกำแพง --- */}
         <Card 
+          id="login-card" 
           style={{ 
             width: 400, 
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)', // เงาบางๆ แบบ Professional
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)', 
             borderRadius: borderRadiusLG,
-            background: colorBgContainer
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(8px)'
           }}
           variant="borderless"
         >
@@ -112,7 +132,17 @@ export const LoginPage = () => {
         </Card>
       </Content>
 
-      <Footer style={{ textAlign: 'center', background: 'transparent' }}>
+      {/* --- id="app-footer" เพื่อทำเป็นกำแพง --- */}
+      <Footer 
+        id="app-footer" 
+        style={{ 
+            textAlign: 'center', 
+            background: 'transparent', 
+            zIndex: 10, 
+            position: 'relative',
+            color: '#666'
+        }}
+      >
         BMS Project ©{new Date().getFullYear()} Created by CocoaD
       </Footer>
     </Layout>
