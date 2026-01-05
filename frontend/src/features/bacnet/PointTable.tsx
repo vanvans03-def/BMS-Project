@@ -44,7 +44,7 @@ interface PointTableProps {
 export const PointTable = ({ points, pointValues, loading, onWritePoint }: PointTableProps) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
-  
+
   // [UPDATED] เพิ่ม State สำหรับ Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -139,6 +139,10 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint }: Point
         const isUpdated = updatedPoints.has(record.id)
 
         if (!pointValue) {
+          if (record.object_type === "OBJECT_DEVICE") {
+            return <Text type="secondary">-</Text>
+          }
+
           return (
             <Space>
               <Spin size="small" />
@@ -254,7 +258,7 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint }: Point
       loading={loading}
       rowKey="id"
       // [UPDATED] ใช้ Pagination รูปแบบเดียวกับ LogsPage
-      pagination={{ 
+      pagination={{
         current: currentPage,
         pageSize: pageSize,
         total: points.length,

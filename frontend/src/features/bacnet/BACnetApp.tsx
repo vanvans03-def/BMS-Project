@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useMemo, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Button, Input, Space, Typography, Card, message, Badge, Row, Col, Divider, Tabs } from "antd"
+import { Button, Input, Space, Typography, Card, message, Badge, Row, Col, Divider, Tabs, Modal, Form, InputNumber } from "antd"
 import {
   SearchOutlined, ReloadOutlined, PlusOutlined, DatabaseOutlined, 
   WifiOutlined, ArrowLeftOutlined, SyncOutlined, GlobalOutlined, 
@@ -12,7 +12,6 @@ import AOS from 'aos'
 import { authFetch } from '../../utils/authFetch'
 import { DashboardLayout } from '../../components/layout/DashboardLayout'
 
-// Components
 import { DeviceTable } from "./DeviceTable"
 import { PointTable } from "./PointTable"
 import { DiscoveryModal } from "./DiscoveryModal"
@@ -22,31 +21,31 @@ import { GeneralSettings, NetworkSettings, UserSettings, DatabaseSettings } from
 import { LogsPage } from "../../components/LogsPage"
 import { ProfileModal } from "../../components/ProfileModal"
 
-// Types
 import type { Device, Point, PointValue } from "../../types/common"
 
 const { Title, Text } = Typography
 
-interface BACnetAppProps {
-  onBack: () => void
-}
+interface BACnetAppProps { onBack: () => void }
 
 export default function BACnetApp({ onBack }: BACnetAppProps) {
   const [currentView, setCurrentView] = useState<string>("dashboard")
   const [searchText, setSearchText] = useState("")
   const [messageApi, contextHolder] = message.useMessage()
   
-  // Data States
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const [pointValues, setPointValues] = useState<Map<number, PointValue>>(new Map())
   
-  // Modal States
   const [isDiscoveryModalOpen, setIsDiscoveryModalOpen] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [discoveredDevices, setDiscoveredDevices] = useState<any[]>([])
   const [selectedDiscoveryRows, setSelectedDiscoveryRows] = useState<React.Key[]>([])
   
+  // [NEW] Edit Polling State
+  const [isEditPollingOpen, setIsEditPollingOpen] = useState(false)
+  const [deviceToEdit, setDeviceToEdit] = useState<Device | null>(null)
+  const [formEditPolling] = Form.useForm()
+
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false)
   const [writingPoint, setWritingPoint] = useState<Point | null>(null)
   const [writeValue, setWriteValue] = useState<string | number>("")
@@ -59,12 +58,11 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
 
   useEffect(() => { AOS.refresh() }, [currentView, selectedDevice])
 
-  // Queries
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: async () => (await authFetch('/settings')).json(),
   })
-  const pollingInterval = Math.max(Number(settings?.polling_interval) || 5000, 1000)
+  const globalPollingInterval = Math.max(Number(settings?.polling_interval) || 5000, 1000)
 
   const { data: devices, isLoading: isLoadingDevices, refetch: refetchDevices } = useQuery<Device[]>({
     queryKey: ["bacnet-devices"],
@@ -79,25 +77,24 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
   const { data: points, isLoading: isLoadingPoints, refetch: refetchPoints } = useQuery<Point[]>({
     queryKey: ["points", selectedDevice?.id],
     enabled: currentView === "detail" && !!selectedDevice,
-    queryFn: async () => {
-        const res = await authFetch(`/points/${selectedDevice!.id}`)
-        const data = await res.json()
-        return Array.isArray(data) ? data : data.points || []
-    },
+    queryFn: async () => (await authFetch(`/points/${selectedDevice!.id}`)).json()
   })
 
   // Polling Logic
   useEffect(() => {
-    if (currentView !== "detail" || !selectedDevice) {
-      setIsMonitoring(false)
-      return
-    }
+    if (currentView !== "detail" || !selectedDevice) { setIsMonitoring(false); return }
     setIsMonitoring(true)
+
+    const effectiveInterval = selectedDevice.polling_interval 
+        ? Math.max(selectedDevice.polling_interval, 1000) 
+        : globalPollingInterval
+
+    console.log(`⏱️ Polling: ${effectiveInterval}ms`)
+
     const fetchValues = async () => {
       try {
         const res = await authFetch('/monitor/read-device-points', {
-          method: "POST",
-          body: JSON.stringify({ deviceId: selectedDevice.id }),
+          method: "POST", body: JSON.stringify({ deviceId: selectedDevice.id }),
         })
         const data = await res.json()
         if (data.success && data.values) {
@@ -108,33 +105,22 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
       } catch (error) { console.error(error) }
     }
     fetchValues()
-    const interval = setInterval(fetchValues, pollingInterval)
+    const interval = setInterval(fetchValues, effectiveInterval)
     return () => { clearInterval(interval); setIsMonitoring(false) }
-  }, [currentView, selectedDevice, pollingInterval])
+  }, [currentView, selectedDevice, globalPollingInterval])
 
   // Handlers
-  // [UPDATED] แก้ไขตรงนี้: กรอง undefined ออกเพื่อให้ได้ Set<number>
   const existingDeviceIds = useMemo(() => {
     if (!devices) return new Set<number>()
-    return new Set(
-      devices
-        .map(d => d.device_instance_id)
-        .filter((id): id is number => id !== undefined)
-    )
+    return new Set(devices.map(d => d.device_instance_id).filter((id): id is number => id !== undefined))
   }, [devices])
 
-  const handleMenuClick = (key: string) => {
-    setCurrentView(key)
-    if (key === 'dashboard') setSelectedDevice(null)
-  }
+  const handleMenuClick = (key: string) => { setCurrentView(key); if (key === 'dashboard') setSelectedDevice(null); }
 
   const handleScan = async () => {
     setIsDiscoveryModalOpen(true); setIsScanning(true); setDiscoveredDevices([]);
-    try {
-      const res = await authFetch('/devices/discover')
-      setDiscoveredDevices(await res.json())
-    } catch { messageApi.error("Scan Failed") }
-    finally { setIsScanning(false) }
+    try { const res = await authFetch('/devices/discover'); setDiscoveredDevices(await res.json()); } 
+    catch { messageApi.error("Scan Failed"); } finally { setIsScanning(false); }
   }
 
   const handleAddSelected = async () => {
@@ -144,54 +130,46 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
       const devicesToAdd = discoveredDevices
         .filter((d) => selectedDiscoveryRows.includes(d.deviceId))
         .map((d) => ({
-          device_name: `Device-${d.deviceId}`,
-          device_instance_id: d.deviceId,
-          ip_address: d.address,
-          network_number: 0,
-          protocol: 'BACNET'
+          device_name: `Device-${d.deviceId}`, device_instance_id: d.deviceId, ip_address: d.address, network_number: 0, protocol: 'BACNET'
         }))
       await authFetch('/devices', { method: 'POST', body: JSON.stringify(devicesToAdd) })
       messageApi.success("Added devices"); setIsDiscoveryModalOpen(false); refetchDevices()
-    } catch { messageApi.error("Error saving") }
-    finally { setIsAdding(false) }
+    } catch { messageApi.error("Error saving"); } finally { setIsAdding(false); }
   }
 
-  const handleSync = async () => {
-    if(!selectedDevice) return
-    setIsSyncing(true)
+  // [NEW] Handler Update Polling
+  const handleUpdatePolling = async (values: any) => {
+    if (!deviceToEdit) return
     try {
-        await authFetch('/points/sync', { method: 'POST', body: JSON.stringify({ deviceId: selectedDevice.id })})
-        messageApi.success("Synced points"); refetchPoints()
-    } catch { messageApi.error("Sync failed") }
-    finally { setIsSyncing(false) }
-  }
-
-  const handleWrite = async () => {
-    if (!selectedDevice || !writingPoint) return
-    setIsWriting(true)
-    try {
-        await authFetch('/points/write', {
-            method: "POST",
-            body: JSON.stringify({
-                deviceId: selectedDevice.id, pointId: writingPoint.id,
-                value: writingPoint.object_type.includes("ANALOG") ? Number(writeValue) : (writeValue === 'active' || writeValue === 1 ? 1 : 0),
-                priority: writePriority
-            })
+        await authFetch(`/devices/${deviceToEdit.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ polling_interval: values.pollingInterval || null })
         })
-        messageApi.success("Command Sent"); setIsWriteModalOpen(false); setTimeout(refetchPoints, 1000)
-    } catch { messageApi.error("Write Failed") }
-    finally { setIsWriting(false) }
+        messageApi.success('Polling interval updated')
+        setIsEditPollingOpen(false)
+        setDeviceToEdit(null)
+        refetchDevices()
+        
+        if (selectedDevice?.id === deviceToEdit.id) {
+            setSelectedDevice(prev => prev ? { ...prev, polling_interval: values.pollingInterval || null } : null)
+        }
+    } catch { messageApi.error('Update failed') }
   }
 
-  // Renderers
+  const handleSync = async () => { /* ... existing ... */ 
+      if(!selectedDevice) return; setIsSyncing(true);
+      try { await authFetch('/points/sync', { method: 'POST', body: JSON.stringify({ deviceId: selectedDevice.id })}); messageApi.success("Synced points"); refetchPoints(); } catch { messageApi.error("Sync failed") } finally { setIsSyncing(false) }
+  }
+  const handleWrite = async () => { /* ... existing ... */ 
+      if (!selectedDevice || !writingPoint) return; setIsWriting(true);
+      try { await authFetch('/points/write', { method: "POST", body: JSON.stringify({ deviceId: selectedDevice.id, pointId: writingPoint.id, value: writingPoint.object_type.includes("ANALOG") ? Number(writeValue) : (writeValue === 'active' || writeValue === 1 ? 1 : 0), priority: writePriority }) }); messageApi.success("Command Sent"); setIsWriteModalOpen(false); setTimeout(refetchPoints, 1000) } catch { messageApi.error("Write Failed") } finally { setIsWriting(false) }
+  }
+
   const renderDashboard = () => (
     <>
       <div style={{ marginBottom: 24 }} data-aos="fade-down">
         <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} md={12}>
-            <Title level={3} style={{ margin: 0 }}>Device Manager</Title>
-            <Text type="secondary">Manage BACnet devices</Text>
-          </Col>
+          <Col xs={24} md={12}><Title level={3} style={{ margin: 0 }}>Device Manager</Title><Text type="secondary">Manage BACnet devices</Text></Col>
           <Col xs={24} md={12} style={{ textAlign: "right" }}>
             <Space>
               <Input prefix={<SearchOutlined />} placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: 200 }} />
@@ -204,7 +182,14 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
       <div data-aos="fade-up"><DeviceStatsCards total={devices?.length||0} online={devices?.length||0} offline={0} /></div>
       <div data-aos="fade-up" data-aos-delay="200">
         <Card>
-            <DeviceTable devices={devices || []} loading={isLoadingDevices} onViewDevice={(d) => { setSelectedDevice(d); setCurrentView("detail") }} searchText={searchText} />
+            <DeviceTable 
+                devices={devices || []} 
+                loading={isLoadingDevices} 
+                defaultPollingInterval={globalPollingInterval} // [NEW] Pass default
+                onViewDevice={(d) => { setSelectedDevice(d); setCurrentView("detail") }} 
+                searchText={searchText} 
+                onEditPolling={(d) => { setDeviceToEdit(d); formEditPolling.setFieldsValue({ pollingInterval: d.polling_interval }); setIsEditPollingOpen(true); }} // [NEW]
+            />
         </Card>
       </div>
     </>
@@ -233,9 +218,7 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
                 </Row>
             </Card>
         </div>
-        <div data-aos="fade-up">
-            <PointStatsCards total={points?.length||0} monitoring={points?.filter(p=>p.is_monitor).length||0} inputs={0} outputs={0} />
-        </div>
+        <div data-aos="fade-up"><PointStatsCards total={points?.length||0} monitoring={points?.filter(p=>p.is_monitor).length||0} inputs={0} outputs={0} /></div>
         <div data-aos="fade-up" data-aos-delay="200">
             <Card>
                 <PointTable points={points||[]} pointValues={pointValues} loading={isLoadingPoints} onWritePoint={(p) => { setWritingPoint(p); setWriteValue(pointValues.get(p.id)?.value ?? ""); setIsWriteModalOpen(true) }} />
@@ -245,14 +228,7 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
   )
 
   return (
-    <DashboardLayout
-        title="BACnet System"
-        headerIcon={<DatabaseOutlined />}
-        themeColor="#1890ff"
-        onBack={onBack}
-        currentView={currentView === 'detail' ? 'dashboard' : currentView}
-        onMenuClick={handleMenuClick}
-    >
+    <DashboardLayout title="BACnet System" headerIcon={<DatabaseOutlined />} themeColor="#1890ff" onBack={onBack} currentView={currentView === 'detail' ? 'dashboard' : currentView} onMenuClick={handleMenuClick}>
         {contextHolder}
         {currentView === 'dashboard' && renderDashboard()}
         {currentView === 'detail' && renderDetail()}
@@ -269,6 +245,38 @@ export default function BACnetApp({ onBack }: BACnetAppProps) {
         {currentView === 'logs' && <LogsPage defaultProtocol="BACNET" />}
 
         <DiscoveryModal open={isDiscoveryModalOpen} loading={isScanning} adding={isAdding} devices={discoveredDevices} selectedRows={selectedDiscoveryRows} existingDeviceIds={existingDeviceIds} onClose={() => setIsDiscoveryModalOpen(false)} onAdd={handleAddSelected} onSelectionChange={setSelectedDiscoveryRows} />
+        
+        {/* [NEW] Edit Polling Modal */}
+        <Modal 
+            title="Edit Polling Interval" 
+            open={isEditPollingOpen} 
+            onCancel={() => setIsEditPollingOpen(false)} 
+            footer={null}
+            width={400}
+        >
+            <div style={{ marginBottom: 16 }}>
+                <Text type="secondary">Target Device: </Text> 
+                <Text strong>{deviceToEdit?.device_name}</Text>
+            </div>
+            <Form form={formEditPolling} layout="vertical" onFinish={handleUpdatePolling}>
+                <Form.Item 
+                    name="pollingInterval" 
+                    label="Polling Interval (ms)" 
+                    help={`Current System Default: ${globalPollingInterval} ms`}
+                >
+                    <InputNumber 
+                        style={{ width: '100%' }} 
+                        placeholder="Leave blank to use Default" 
+                        min={1000} step={500} 
+                    />
+                </Form.Item>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <Button onClick={() => setIsEditPollingOpen(false)}>Cancel</Button>
+                    <Button type="primary" htmlType="submit">Update</Button>
+                </div>
+            </Form>
+        </Modal>
+
         <WriteValueModal open={isWriteModalOpen} point={writingPoint} currentValue={pointValues.get(writingPoint?.id||0)?.value} writeValue={writeValue} priority={writePriority} loading={isWriting} onClose={() => setIsWriteModalOpen(false)} onWrite={handleWrite} onValueChange={setWriteValue} onPriorityChange={setWritePriority} />
         <ProfileModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
     </DashboardLayout>

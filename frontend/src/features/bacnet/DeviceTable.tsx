@@ -1,25 +1,23 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { Table, Button, Badge, Typography } from 'antd'
+import { Table, Button, Badge, Typography, Space, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import AOS from 'aos'
-
-// [UPDATED] Import Type กลางมาใช้แทนการประกาศเอง
+import { SettingOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import type { Device } from '../../types/common'
 
 const { Text } = Typography
 
-// [REMOVED] ลบ interface Device เดิมออก
-// interface Device { ... } 
-
 interface DeviceTableProps {
   devices: Device[]
   loading: boolean
+  defaultPollingInterval: number // [NEW]
   onViewDevice: (device: Device) => void
+  onEditPolling: (device: Device) => void // [NEW]
   searchText: string
 }
 
-export const DeviceTable = ({ devices, loading, onViewDevice, searchText }: DeviceTableProps) => {
+export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDevice, onEditPolling, searchText }: DeviceTableProps) => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
@@ -28,27 +26,18 @@ export const DeviceTable = ({ devices, loading, onViewDevice, searchText }: Devi
   }, [devices])
 
   const filteredDevices = useMemo(() => {
-    if (!searchText || searchText.trim() === '') {
-      return devices
-    }
-
+    if (!searchText || searchText.trim() === '') return devices
     const lowerSearch = searchText.toLowerCase().trim()
-
     return devices.filter(device => {
       const statusMatch = 'online'.includes(lowerSearch)
       const nameMatch = device.device_name?.toLowerCase().includes(lowerSearch)
-      // [UPDATED] ใส่ ?. และ ?? false เพื่อรองรับ undefined
       const instanceMatch = device.device_instance_id?.toString().includes(lowerSearch) ?? false
       const ipMatch = device.ip_address?.toLowerCase().includes(lowerSearch)
-      const networkMatch = device.network_number?.toString().includes(lowerSearch) ?? false
-
-      return statusMatch || nameMatch || instanceMatch || ipMatch || networkMatch
+      return statusMatch || nameMatch || instanceMatch || ipMatch
     })
   }, [devices, searchText])
 
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [searchText])
+  useEffect(() => { setCurrentPage(1) }, [searchText])
 
   const columns: ColumnsType<Device> = [
     {
@@ -56,7 +45,6 @@ export const DeviceTable = ({ devices, loading, onViewDevice, searchText }: Devi
       key: 'status',
       width: 100,
       align: 'center',
-      responsive: ['md'],
       render: () => <Badge status="success" text="Online" style={{ color: '#52c41a' }} />
     },
     {
@@ -68,7 +56,6 @@ export const DeviceTable = ({ devices, loading, onViewDevice, searchText }: Devi
           <Text strong style={{ fontSize: 15 }}>{text}</Text>
           <br />
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {/* [UPDATED] ใส่ ?? '-' กันไว้กรณีไม่มี ID */}
             ID: {record.device_instance_id ?? '-'}
           </Text>
         </div>
@@ -80,12 +67,27 @@ export const DeviceTable = ({ devices, loading, onViewDevice, searchText }: Devi
       key: 'ip_address',
       responsive: ['lg']
     },
+    // [NEW] Polling Column
     {
-      title: 'Network',
-      dataIndex: 'network_number',
-      key: 'network',
-      responsive: ['xl'],
-      render: (val) => val || '-'
+      title: 'Polling',
+      key: 'polling',
+      width: 160,
+      render: (_, record) => {
+        const isCustom = record.polling_interval != null
+        const interval = isCustom ? record.polling_interval : defaultPollingInterval
+        
+        return (
+          <Space>
+             <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <Text style={{ color: isCustom ? '#1890ff' : '#8c8c8c' }}>
+                   <ClockCircleOutlined /> {interval} ms
+                </Text>
+                {isCustom && <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', margin: 0, width: 'fit-content' }}>Custom</Tag>}
+             </div>
+             <Button size="small" type="text" icon={<SettingOutlined />} onClick={(e) => { e.stopPropagation(); onEditPolling(record); }} />
+          </Space>
+        )
+      }
     },
     {
       title: 'Action',
@@ -110,16 +112,9 @@ export const DeviceTable = ({ devices, loading, onViewDevice, searchText }: Devi
         current: currentPage,
         pageSize: pageSize,
         total: filteredDevices.length,
-        showSizeChanger: true,
-        showQuickJumper: true,
-        pageSizeOptions: ['10', '20', '50', '100'],
-        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} devices`,
         onChange: (page, newPageSize) => {
           setCurrentPage(page)
-          if (newPageSize !== pageSize) {
-            setPageSize(newPageSize)
-            setCurrentPage(1) 
-          }
+          if (newPageSize !== pageSize) { setPageSize(newPageSize); setCurrentPage(1); }
         }
       }}
       scroll={{ x: 800 }}
