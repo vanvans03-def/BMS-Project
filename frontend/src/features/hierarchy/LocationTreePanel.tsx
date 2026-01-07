@@ -30,7 +30,6 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
         try {
             const res = await authFetch('/locations')
             const data = await res.json()
-            const data = await res.json()
             setLocations(data)
             // setTreeData handled by useEffect
             // Expand all by default on first load?
@@ -131,7 +130,7 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
     const handleSave = async (values: any) => {
         const payload = { ...values, parent_id: parentForAdd }
         try {
-            let savedItem;
+            let savedItem: any;
             if (editingNode) {
                 const res = await authFetch(`/locations/${editingNode.id}`, {
                     method: 'PUT',
