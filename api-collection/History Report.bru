@@ -1,0 +1,20 @@
+meta {
+  name: History Report
+  type: http
+  seq: 3
+}
+
+get {
+  url: http://localhost:3000/api/reports/history?start=2025-01-01&end=2026-12-31
+  body: none
+  auth: bearer
+}
+
+params:query {
+  start: 2025-01-01
+  end: 2026-12-31
+}
+
+auth:bearer {
+  token: {{token}}
+}

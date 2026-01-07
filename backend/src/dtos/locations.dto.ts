@@ -14,14 +14,14 @@ export const CreateLocationDto = t.Object({
     parent_id: t.Optional(t.Nullable(t.Number())),
     name: t.String(),
     type: t.String(), // 'Building', 'Floor', 'Room', 'Folder'
-    description: t.Optional(t.String())
+    description: t.Optional(t.Nullable(t.String()))
 })
 
 export const UpdateLocationDto = t.Object({
     parent_id: t.Optional(t.Nullable(t.Number())),
     name: t.Optional(t.String()),
     type: t.Optional(t.String()),
-    description: t.Optional(t.String())
+    description: t.Optional(t.Nullable(t.String()))
 })
 
 export type CreateLocationPayload = typeof CreateLocationDto.static
