@@ -11,15 +11,24 @@ import { LoginPage } from './components/LoginPage'
 import { PortalPage } from './features/portal/PortalPage'
 import BACnetApp from './features/bacnet/BACnetApp'
 import ModbusApp from './features/modbus/ModbusApp'
-import CentralLogsApp from './features/logs/CentralLogsApp' // [New Import]
+import CentralLogsApp from './features/central_logs/CentralLogsApp'
+import HierarchyApp from './features/hierarchy/HierarchyApp' // [New Import]
 
 const { Content } = Layout
 
 function App() {
   const { isAuthenticated, isLoading } = useAuth()
-  
-  // เพิ่ม state 'LOGS'
-  const [currentSystem, setCurrentSystem] = useState<'BACNET' | 'MODBUS' | 'LOGS' | null>(null)
+
+  // เพิ่ม state 'LOGS', 'HIERARCHY'
+  const [currentSystem, setCurrentSystem] = useState<'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | null>(null)
+
+  // State for Deep Linking
+  const [targetDeviceId, setTargetDeviceId] = useState<number | null>(null)
+
+  const handleNavigate = (system: 'BACNET' | 'MODBUS', deviceId: number) => {
+    setTargetDeviceId(deviceId)
+    setCurrentSystem(system)
+  }
 
   useEffect(() => {
     AOS.init({ duration: 600, easing: 'ease-out-cubic', once: false, offset: 50 })
@@ -40,15 +49,19 @@ function App() {
 
   // Routing Logic
   if (currentSystem === 'BACNET') {
-    return <BACnetApp onBack={() => setCurrentSystem(null)} />
+    return <BACnetApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} />
   }
 
   if (currentSystem === 'MODBUS') {
-    return <ModbusApp onBack={() => setCurrentSystem(null)} />
+    return <ModbusApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} />
   }
 
   if (currentSystem === 'LOGS') {
     return <CentralLogsApp onBack={() => setCurrentSystem(null)} />
+  }
+
+  if (currentSystem === 'HIERARCHY') {
+    return <HierarchyApp onBack={() => setCurrentSystem(null)} onNavigate={handleNavigate} />
   }
 
   // Default: Portal

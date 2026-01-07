@@ -24,25 +24,33 @@ export const devicesService = {
       for (const dev of devicesToAdd) {
         const instanceId = dev.device_instance_id
         const name = dev.device_name ?? `Device-${instanceId}`
-        
+
         let ip = dev.ip_address ?? null
         const network = dev.network_number ?? 0
         const protocol = dev.protocol || 'BACNET'
         const unitId = dev.unit_id || null
-        
+
         // @ts-ignore
-        const pollingInterval = dev.polling_interval || null 
+        const pollingInterval = dev.polling_interval || null
+
+        // [NEW] App 4 Fields
+        const locationId = dev.location_id || null
+        const isHistoryEnabled = dev.is_history_enabled || false
+
+
 
         const existing = await sql`SELECT id FROM devices WHERE device_instance_id = ${instanceId}`
-        
+
         if (existing.length === 0) {
           const [newDev] = await sql`
             INSERT INTO devices (
                 device_name, device_instance_id, ip_address, network_number,
-                is_active, protocol, unit_id, polling_interval
+                is_active, protocol, unit_id, polling_interval,
+                location_id, is_history_enabled
             ) VALUES (
                 ${name}, ${instanceId}, ${ip}, ${network},
-                true, ${protocol}, ${unitId}, ${pollingInterval}
+                true, ${protocol}, ${unitId}, ${pollingInterval},
+                ${locationId}, ${isHistoryEnabled}
             )
             RETURNING *
           `
@@ -55,12 +63,22 @@ export const devicesService = {
   },
 
   // [NEW] ฟังก์ชันอัปเดตข้อมูลอุปกรณ์ (เช่น Polling Interval)
-  async updateDevice(id: number, data: { polling_interval?: number | null, device_name?: string }) {
+  async updateDevice(id: number, data: {
+    polling_interval?: number | null,
+    device_name?: string,
+    location_id?: number | null,
+    is_history_enabled?: boolean
+  }) {
     try {
       const updates: any = {}
       if (data.device_name !== undefined) updates.device_name = data.device_name
       // อนุญาตให้ส่ง null เพื่อ Reset กลับไปใช้ Default
       if (data.polling_interval !== undefined) updates.polling_interval = data.polling_interval
+
+      if (data.location_id !== undefined) updates.location_id = data.location_id
+      if (data.is_history_enabled !== undefined) updates.is_history_enabled = data.is_history_enabled
+
+
 
       if (Object.keys(updates).length === 0) return { success: true }
 

@@ -7,6 +7,10 @@ export interface Point {
   description?: string
   is_monitor: boolean
   created_at?: string
+
+  // New Report Fields
+  point_mark?: string
+  report_table_name?: string
 }
 
 export interface Device {

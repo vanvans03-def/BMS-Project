@@ -13,11 +13,11 @@ interface DeviceTableProps {
   loading: boolean
   defaultPollingInterval: number // [NEW]
   onViewDevice: (device: Device) => void
-  onEditPolling: (device: Device) => void // [NEW]
+  onEditDevice: (device: Device) => void // [NEW] (Renamed from onEditPolling)
   searchText: string
 }
 
-export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDevice, onEditPolling, searchText }: DeviceTableProps) => {
+export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDevice, onEditDevice, searchText }: DeviceTableProps) => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
@@ -75,16 +75,16 @@ export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDe
       render: (_, record) => {
         const isCustom = record.polling_interval != null
         const interval = isCustom ? record.polling_interval : defaultPollingInterval
-        
+
         return (
           <Space>
-             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <Text style={{ color: isCustom ? '#1890ff' : '#8c8c8c' }}>
-                   <ClockCircleOutlined /> {interval} ms
-                </Text>
-                {isCustom && <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', margin: 0, width: 'fit-content' }}>Custom</Tag>}
-             </div>
-             <Button size="small" type="text" icon={<SettingOutlined />} onClick={(e) => { e.stopPropagation(); onEditPolling(record); }} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <Text style={{ color: isCustom ? '#1890ff' : '#8c8c8c' }}>
+                <ClockCircleOutlined /> {interval} ms
+              </Text>
+              {isCustom && <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', margin: 0, width: 'fit-content' }}>Custom</Tag>}
+            </div>
+            <Button size="small" type="text" icon={<SettingOutlined />} onClick={(e) => { e.stopPropagation(); onEditDevice(record); }} />
           </Space>
         )
       }
@@ -108,7 +108,7 @@ export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDe
       dataSource={filteredDevices}
       loading={loading}
       rowKey="id"
-      pagination={{ 
+      pagination={{
         current: currentPage,
         pageSize: pageSize,
         total: filteredDevices.length,

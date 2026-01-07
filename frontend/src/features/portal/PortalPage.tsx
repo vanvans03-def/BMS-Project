@@ -1,12 +1,12 @@
 import { Card, Typography, Row, Col, Space, Badge } from 'antd'
-import { ApiOutlined, DatabaseOutlined, RightOutlined, FileSearchOutlined } from '@ant-design/icons'
+import { ApiOutlined, DatabaseOutlined, RightOutlined, FileSearchOutlined, ApartmentOutlined } from '@ant-design/icons'
 import AOS from 'aos'
 import { useEffect } from 'react'
 
 const { Title, Text } = Typography
 
 interface PortalPageProps {
-  onSelectSystem: (system: 'BACNET' | 'MODBUS' | 'LOGS') => void
+  onSelectSystem: (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY') => void
 }
 
 export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
@@ -23,11 +23,11 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
   }
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: '#f0f2f5', 
-      display: 'flex', 
-      alignItems: 'center', 
+    <div style={{
+      minHeight: '100vh',
+      background: '#f0f2f5',
+      display: 'flex',
+      alignItems: 'center',
       justifyContent: 'center',
       padding: 24
     }}>
@@ -38,11 +38,11 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
         </div>
 
         <Row gutter={[24, 24]} justify="center">
-          
+
           {/* 1. BACnet Card */}
-          <Col xs={24} md={8} data-aos="fade-up" data-aos-delay="100">
-            <Card 
-              hoverable 
+          <Col xs={24} md={6} data-aos="fade-up" data-aos-delay="100">
+            <Card
+              hoverable
               style={cardStyle}
               onClick={() => onSelectSystem('BACNET')}
               className="hover-lift"
@@ -61,9 +61,9 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
           </Col>
 
           {/* 2. Modbus Card */}
-          <Col xs={24} md={8} data-aos="fade-up" data-aos-delay="200">
-            <Card 
-              hoverable 
+          <Col xs={24} md={6} data-aos="fade-up" data-aos-delay="200">
+            <Card
+              hoverable
               style={cardStyle}
               onClick={() => onSelectSystem('MODBUS')}
               className="hover-lift"
@@ -82,16 +82,16 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
           </Col>
 
           {/* 3. Central Logs Card (New) */}
-          <Col xs={24} md={8} data-aos="fade-up" data-aos-delay="300">
-            <Card 
-              hoverable 
+          <Col xs={24} md={6} data-aos="fade-up" data-aos-delay="300">
+            <Card
+              hoverable
               style={cardStyle}
               onClick={() => onSelectSystem('LOGS')}
               className="hover-lift"
             >
               <div style={{ textAlign: 'center', padding: '32px 16px' }}>
                 <Badge count="All" offset={[10, 0]} color="#722ed1">
-                    <FileSearchOutlined style={{ fontSize: 56, color: '#722ed1', marginBottom: 24 }} />
+                  <FileSearchOutlined style={{ fontSize: 56, color: '#722ed1', marginBottom: 24 }} />
                 </Badge>
                 <Title level={3}>Central Logs</Title>
                 <Text type="secondary" style={{ display: 'block', marginBottom: 24, minHeight: 44 }}>
@@ -99,6 +99,27 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
                 </Text>
                 <Space style={{ color: '#722ed1', fontWeight: 500 }}>
                   View Logs <RightOutlined />
+                </Space>
+              </div>
+            </Card>
+          </Col>
+
+          {/* 4. Hierarchy App Card (New) */}
+          <Col xs={24} md={6} data-aos="fade-up" data-aos-delay="400">
+            <Card
+              hoverable
+              style={cardStyle}
+              onClick={() => onSelectSystem('HIERARCHY')}
+              className="hover-lift"
+            >
+              <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+                <ApartmentOutlined style={{ fontSize: 56, color: '#eb2f96', marginBottom: 24 }} />
+                <Title level={3}>Hierarchy App</Title>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 24, minHeight: 44 }}>
+                  Manage Locations, Buildings, and Assign Devices to areas.
+                </Text>
+                <Space style={{ color: '#eb2f96', fontWeight: 500 }}>
+                  Manage Assets <RightOutlined />
                 </Space>
               </div>
             </Card>

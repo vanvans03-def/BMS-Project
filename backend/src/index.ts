@@ -10,6 +10,9 @@ import { auditLogRoutes } from './routes/audit-logs.routes'
 import { authRoutes } from './routes/auth.routes'
 import { integrationRoutes } from './routes/integration.routes'
 import { modbusRoutes } from './routes/modbus.routes'
+import { locationsRoutes } from './routes/locations.routes' // [NEW]
+import { historyLogRoutes } from './routes/history-logs.routes' // [NEW]
+import { historyLoggerService } from './services/history-logger.service'
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback'
@@ -48,7 +51,11 @@ const app = new Elysia()
   .use(auditLogRoutes)
   .use(modbusRoutes)
   .use(integrationRoutes) // Register Integration Routes
+  .use(locationsRoutes) // [NEW] Locations
+  .use(historyLogRoutes) // [NEW] History Logs
   .listen(3000)
+
+historyLoggerService.start()
 
 console.log(`🦊 Backend is running at ${app.server?.hostname}:${app.server?.port}`)
 

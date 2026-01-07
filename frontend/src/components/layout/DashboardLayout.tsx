@@ -18,6 +18,7 @@ interface DashboardLayoutProps {
   onMenuClick: (key: string) => void;
   children: React.ReactNode;
   onProfileClick?: () => void;
+  showMenu?: boolean; // [NEW]
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
@@ -28,7 +29,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   currentView,
   onMenuClick,
   children,
-  onProfileClick
+  onProfileClick,
+  showMenu = true
 }) => {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -76,7 +78,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         <Divider type="vertical" style={{ background: 'rgba(255,255,255,0.2)', margin: '0 16px' }} />
 
         <div style={{ fontSize: 24, marginRight: 12, color: themeColor, display: 'flex', alignItems: 'center' }}>
-            {headerIcon}
+          {headerIcon}
         </div>
         <Title level={4} style={{ margin: 0, color: 'white' }}>
           {title}
@@ -100,25 +102,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       </Header>
 
       <Layout>
-        <Sider
-          collapsible
-          collapsed={collapsed}
-          onCollapse={setCollapsed}
-          theme="light"
-          breakpoint="lg"
-          collapsedWidth={window.innerWidth < 768 ? 0 : 80}
-        >
-          <Menu
-            mode="inline"
-            selectedKeys={[currentView]}
-            onClick={({ key }) => onMenuClick(key)}
-            items={[
-              { key: "dashboard", icon: <AppstoreOutlined />, label: "Dashboard" },
-              { key: "settings", icon: <SettingOutlined />, label: "Settings" },
-              { key: "logs", icon: <FileTextOutlined />, label: "Logs" },
-            ]}
-          />
-        </Sider>
+        {showMenu && (
+          <Sider
+            collapsible
+            collapsed={collapsed}
+            onCollapse={setCollapsed}
+            theme="light"
+            breakpoint="lg"
+            collapsedWidth={window.innerWidth < 768 ? 0 : 80}
+          >
+            <Menu
+              mode="inline"
+              selectedKeys={[currentView]}
+              onClick={({ key }) => onMenuClick(key)}
+              items={[
+                { key: "dashboard", icon: <AppstoreOutlined />, label: "Dashboard" },
+                { key: "settings", icon: <SettingOutlined />, label: "Settings" },
+                { key: "logs", icon: <FileTextOutlined />, label: "Logs" },
+              ]}
+            />
+          </Sider>
+        )}
 
         <Layout style={{ padding: "16px" }}>
           <Content

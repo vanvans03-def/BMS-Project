@@ -54,6 +54,12 @@ export interface CreateDeviceDto {
   device_instance_id: number
   ip_address: string
   network_number?: number
+  protocol?: string
+  unit_id?: number
+  polling_interval?: number | null
+
+  location_id?: number
+  is_history_enabled?: boolean
 }
 
 export interface CreatePointDto {
@@ -79,4 +85,8 @@ export interface CreateDevicePayload {
   network_number?: number
   protocol?: 'BACNET' | 'MODBUS' // เพิ่ม Field นี้
   unit_id?: number               // เพิ่ม Field นี้
+  polling_interval?: number | null
+
+  location_id?: number
+  is_history_enabled?: boolean
 }

@@ -71,10 +71,10 @@ const ModbusNetworkSettings = () => {
   )
 }
 
-interface ModbusAppProps { onBack: () => void }
+interface ModbusAppProps { onBack: () => void; initialDeviceId?: number | null }
 
-export default function ModbusApp({ onBack }: ModbusAppProps) {
-  const [currentView, setCurrentView] = useState<string>('dashboard')
+export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
+  const [currentView, setCurrentView] = useState<string>(initialDeviceId ? "loading" : "dashboard")
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -114,6 +114,22 @@ export default function ModbusApp({ onBack }: ModbusAppProps) {
     },
     refetchInterval: 10000
   })
+
+  // [NEW] Auto-select device from navigation
+  useEffect(() => {
+    if (initialDeviceId && devices) {
+      if (!selectedDevice) {
+        const target = devices.find(d => d.id === initialDeviceId)
+        if (target) {
+          setSelectedDevice(target)
+          setCurrentView('detail')
+        } else if (!loadingDevices) {
+          messageApi.error("Device not found")
+          setCurrentView('dashboard')
+        }
+      }
+    }
+  }, [devices, initialDeviceId, loadingDevices])
 
   const { data: points, isLoading: loadingPoints, refetch: refetchPoints } = useQuery<Point[]>({
     queryKey: ['modbus-points', selectedDevice?.id],
@@ -360,6 +376,21 @@ export default function ModbusApp({ onBack }: ModbusAppProps) {
       </div>
     </>
   )
+
+  if (currentView === 'loading') {
+    return (
+      <DashboardLayout title="Modbus System" headerIcon={<HddOutlined />} themeColor="#faad14" onBack={onBack} currentView="loading" onMenuClick={() => { }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+          <Card style={{ width: 300, textAlign: 'center' }}>
+            <Space direction="vertical">
+              <Text>Loading Device...</Text>
+              <ThunderboltOutlined spin style={{ fontSize: 24, color: '#faad14' }} />
+            </Space>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout title="Modbus System" headerIcon={<HddOutlined />} themeColor="#faad14" onBack={onBack} currentView={currentView === 'detail' ? 'dashboard' : currentView} onMenuClick={(k) => { setCurrentView(k); if (k === 'dashboard') setSelectedDevice(null) }} onProfileClick={() => setIsProfileModalOpen(true)}>
