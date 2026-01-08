@@ -98,6 +98,7 @@ export const historyReportService = {
 
         for (let i = 0; i < logs.length; i++) {
             const row = logs[i]
+            if (!row) continue
 
             // Resolve Hierarchy
             const locContext = await this.getLocationContext(row.location_id, allLocations)
@@ -128,5 +129,38 @@ export const historyReportService = {
         }
 
         return reportData
+    },
+
+    /**
+     * Optimized Report Data (Low Code Ready)
+     * Uses Materialized View for instant aggregation and flat hierarchy.
+     */
+    async getHourlyReportOptimized(startDate: string, endDate: string) {
+        console.time('report-optimized')
+        const rows = await sql`
+            SELECT 
+                row_number() OVER (ORDER BY time_bucket ASC) as no,
+                'Record' as source,
+                'Hourly' as configuration,
+                unit,
+                
+                -- Format date to DD-MMM-YYYY
+                to_char(time_bucket, 'DD-Mon-YYYY') as activate_date,
+                
+                point_name as mark, -- mapping point_name to mark
+                type_cabinet,
+                zone,
+                panel,
+                device_name as cb, -- or panel?
+                floor,
+                '' as phase, -- phase not yet in view
+                room,
+                avg_value as value
+            FROM mv_history_hourly
+            WHERE time_bucket BETWEEN ${startDate} AND ${endDate}
+            ORDER BY time_bucket ASC
+        `
+        console.timeEnd('report-optimized')
+        return rows
     }
 }

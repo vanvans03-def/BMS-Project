@@ -1,5 +1,5 @@
-import { sql } from './src/db';
-import { monitorService } from './src/services/monitor.service';
+import { sql } from '../src/db';
+import { monitorService } from '../src/services/monitor.service';
 
 async function debug() {
     const instanceId = 1234;

@@ -1,27 +1,35 @@
 import { sql } from '../db'
 import { monitorService } from './monitor.service'
+import { historyTableService } from './history-table.service'
 
 /**
  * Service to manage background history logging
  * Features:
  * - Per-device polling interval
  * - Independent scheduling
+ * - Dynamic Table Writing (Table-Per-Point)
  */
 class HistoryLoggerService {
     private intervalId: Timer | null = null
     private isRunning = false
     private readonly CHECK_INTERVAL_MS = 1000 // Check every second
-    private lastPollMap = new Map<number, number>() // deviceId -> timestamp
+
+    // deviceId -> last poll timestamp
+    private lastPollMap = new Map<number, number>()
+
+    // pointId -> { value: number, timestamp: number }
+    private pointCache = new Map<number, { value: number, timestamp: number }>()
+
+    private readonly DEADBAND_PERCENT = 0.5 // 0.5% change required to log
+    private readonly MAX_INTERVAL_MS = 60 * 60 * 1000 // 1 Hour heartbeat
 
     /**
      * Start the history logging job
      */
     start() {
         if (this.intervalId) return console.log('⏳ [History] Logger already running')
+        console.log('🚀 [History] Starting History Logger Service (Dynamic Tables)...')
 
-        console.log('🚀 [History] Starting History Logger Service (Smart Scheduling)...')
-
-        // Run loop
         this.intervalId = setInterval(() => {
             this.runScheduler()
         }, this.CHECK_INTERVAL_MS)
@@ -35,35 +43,24 @@ class HistoryLoggerService {
         }
     }
 
-    /**
-     * Scheduler Loop
-     */
     private async runScheduler() {
-        if (this.isRunning) return // Skip if previous run is dragging (rare for 1s tick, but safe)
+        if (this.isRunning) return
         this.isRunning = true
 
         try {
-            // 1. Get enabled devices (optimize: cache this or fetch only needed fields)
-            // Fetching every second is fine for < 1000 devices on local DB.
+            // Fetch enabled devices
             const devices = await sql`
-                SELECT id, device_name, polling_interval 
+                SELECT id, device_name, polling_interval, logging_type
                 FROM devices 
                 WHERE is_history_enabled = true
             `
-
             const now = Date.now()
 
             for (const device of devices) {
-                const interval = device.polling_interval || 60000 // Default 60s
+                const interval = device.polling_interval || 60000
                 const lastPoll = this.lastPollMap.get(device.id) || 0
 
                 if (now - lastPoll >= interval) {
-                    // Time to poll!
-                    // Fire and forget (don't await) to let other devices process?
-                    // OR await to ensure we don't overwhelm?
-                    // Let's await for safety, but this means slow devices delay others.
-                    // Ideally: Promise.all or independent async tasks. 
-                    // detailed implementation:
                     this.pollDevice(device, now)
                 }
             }
@@ -76,15 +73,20 @@ class HistoryLoggerService {
     }
 
     private async pollDevice(device: any, timestamp: number) {
-        // Update map immediately to prevent double-polling if this takes long
         this.lastPollMap.set(device.id, timestamp)
+        const loggingType = device.logging_type || 'COV' // Default to COV
 
         try {
-            // Read values
+            // 1. Fetch Point Metadata (Name) for Table Resolution
+            // optimize: cache this map if needed, but for now DB fetch is robust
+            const pointsMeta = await sql`SELECT id, point_name FROM points WHERE device_id = ${device.id}`
+            const pointNameMap = new Map<number, string>()
+            pointsMeta.forEach(p => pointNameMap.set(p.id, p.point_name))
+
+            // 2. Read Values
             const result = await monitorService.readDevicePoints(device.id)
 
             if (!result.success || !result.values.length) {
-                // If read failed logically (e.g. connection error handled by monitor service)
                 await sql`UPDATE devices SET status = 'failed' WHERE id = ${device.id}`
                 return
             }
@@ -95,28 +97,69 @@ class HistoryLoggerService {
                 return
             }
 
-            const records = validData.map(v => ({
-                device_id: device.id,
-                point_id: v.pointId,
-                value: Number(v.value),
-                quality_code: 'good'
-            }))
+            let logCount = 0
 
-            await sql`INSERT INTO history_logs ${sql(records)}`
+            for (const v of validData) {
+                const pointId = v.pointId
+                const pointName = pointNameMap.get(pointId)
+                if (!pointName) continue // Should not happen if DB integrity OK
 
-            // [NEW] Update Status = Online
+                const newValue = Number(v.value)
+                const lastCache = this.pointCache.get(pointId)
+                let shouldLog = false
+
+                if (!lastCache) {
+                    shouldLog = true
+                } else if (loggingType === 'INTERVAL') {
+                    // INTERVAL Mode: Always log on poll cycle
+                    shouldLog = true
+                } else {
+                    // COV Mode: Check deadband or max interval
+                    const timeDiff = timestamp - lastCache.timestamp
+                    if (timeDiff >= this.MAX_INTERVAL_MS) {
+                        shouldLog = true
+                    } else {
+                        const loading = Math.abs(newValue - lastCache.value)
+                        const percentChange = lastCache.value === 0
+                            ? (newValue === 0 ? 0 : 100)
+                            : (loading / Math.abs(lastCache.value)) * 100
+
+                        if (percentChange >= this.DEADBAND_PERCENT) {
+                            shouldLog = true
+                        }
+                    }
+                }
+
+                if (shouldLog) {
+                    // DYNAMIC TABLE WRITE
+                    const tableName = historyTableService.getTableName(device.device_name, pointName)
+
+                    // We can't use prepared statement variable for table name easily in postgres.js `${sql(tableName)}` might work if helper used correctly,
+                    // or usage of sql.unsafe for the whole query.
+                    // Safe approach with postgres.js helper: sql(tableName)
+
+                    await sql`
+                        INSERT INTO ${sql(tableName)} (value, timestamp, quality_code)
+                        VALUES (${newValue}, ${new Date(timestamp)}, 'good')
+                    `
+
+                    this.pointCache.set(pointId, { value: newValue, timestamp })
+                    logCount++
+                }
+            }
+
+            if (logCount > 0) {
+                console.log(`✅ [History] Logged ${logCount} points for ${device.device_name} (Dynamic Tables)`)
+            }
+
             await sql`
                 UPDATE devices 
                 SET status = 'online', last_seen = NOW()
                 WHERE id = ${device.id}
             `
 
-            // Console log only occasionally or debug? Too spammy every 1s
-            console.log(`✅ [History] Logged ${records.length} points for ${device.device_name} (Interval: ${device.polling_interval})`)
-
         } catch (err) {
             console.error(`❌ [History] Failed to log ${device.device_name}:`, err)
-            // [NEW] Update Status = Failed
             await sql`UPDATE devices SET status = 'failed' WHERE id = ${device.id}`
         }
     }

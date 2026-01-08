@@ -1,5 +1,5 @@
-import { sql } from './src/db'
-import { historyReportService } from './src/services/history-report.service'
+import { sql } from '../src/db'
+import { historyReportService } from '../src/services/history-report.service'
 
 async function verify() {
     console.log('🧪 Starting Report Data Verification...')

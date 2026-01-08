@@ -35,7 +35,7 @@ export const devicesRoutes = new Elysia({ prefix: '/devices' })
 
   // [NEW] Route สำหรับอัปเดตอุปกรณ์
   .put('/:id', async ({ params, body }) => {
-    return await devicesService.updateDevice(Number(params.id), body)
+    return await devicesService.updateDevice(Number(params.id), body as any)
   }, {
     body: t.Object({
       device_name: t.Optional(t.String()),

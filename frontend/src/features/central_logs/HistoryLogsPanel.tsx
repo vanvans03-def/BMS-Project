@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, DatePicker, Select, Button, Tag, Pagination, Card, Space, message } from 'antd';
+import { Table, DatePicker, Select, Button, Tag, Pagination, Card, Space, message, Descriptions } from 'antd';
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import axios from 'axios';
@@ -9,12 +9,14 @@ const { Option } = Select;
 
 interface HistoryLog {
     timestamp: string;
-    device_name: string;
-    point_name: string;
     value: number;
     quality_code: string;
-    object_type: string;
-    object_instance: number;
+}
+
+interface HistoryTable {
+    table_name: string;
+    device_name: string;
+    point_name: string;
 }
 
 const HistoryLogsPanel: React.FC = () => {
@@ -24,40 +26,51 @@ const HistoryLogsPanel: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
 
-    // Filters
-    const [selectedDevice, setSelectedDevice] = useState<string | undefined>(undefined);
+    // Filters,
+    const [tables, setTables] = useState<HistoryTable[]>([]);
+    const [selectedTableName, setSelectedTableName] = useState<string | undefined>(undefined);
     const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
-    const [devices, setDevices] = useState<{ id: number, device_name: string }[]>([]);
 
     useEffect(() => {
-        fetchDevices();
-        fetchLogs();
+        fetchTables();
     }, []);
 
     useEffect(() => {
-        fetchLogs();
-    }, [currentPage, pageSize]); // Only auto-fetch on pagination change
+        if (selectedTableName) {
+            fetchLogs();
+        } else {
+            setLogs([]);
+            setTotal(0);
+        }
+    }, [currentPage, pageSize, selectedTableName]); // Auto-fetch when these change
 
-    const fetchDevices = async () => {
+    const fetchTables = async () => {
         try {
             const token = localStorage.getItem('bms_token');
-            const response = await axios.get('http://localhost:3000/devices', {
+            const response = await axios.get('http://localhost:3000/api/history-logs/tables', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setDevices(response.data);
+            const data = Array.isArray(response.data) ? response.data : [];
+            setTables(data);
+            if (data.length > 0) {
+                // Optional: Auto-select first table? 
+                // setSelectedTableName(data[0].table_name);
+            }
         } catch (error) {
-            console.error('Failed to fetch devices', error);
+            console.error('Failed to fetch history tables', error);
+            message.error('Failed to load history configuration');
         }
     };
 
     const fetchLogs = async () => {
+        if (!selectedTableName) return;
+
         setLoading(true);
         try {
             const token = localStorage.getItem('bms_token');
             const params: any = {
                 page: currentPage,
                 limit: pageSize,
-                deviceId: selectedDevice
             };
 
             if (dateRange) {
@@ -65,7 +78,7 @@ const HistoryLogsPanel: React.FC = () => {
                 params.endDate = dateRange[1].toISOString();
             }
 
-            const response = await axios.get('http://localhost:3000/api/history-logs', {
+            const response = await axios.get(`http://localhost:3000/api/history-logs/table/${selectedTableName}`, {
                 headers: { Authorization: `Bearer ${token}` },
                 params
             });
@@ -86,19 +99,7 @@ const HistoryLogsPanel: React.FC = () => {
             dataIndex: 'timestamp',
             key: 'timestamp',
             render: (text: string) => dayjs(text).format('YYYY-MM-DD HH:mm:ss'),
-            width: 180,
-        },
-        {
-            title: 'Device',
-            dataIndex: 'device_name',
-            key: 'device_name',
             width: 200,
-        },
-        {
-            title: 'Point',
-            dataIndex: 'point_name',
-            key: 'point_name',
-            render: (text: string) => <span style={{ fontWeight: 500 }}>{text}</span>
         },
         {
             title: 'Value',
@@ -112,59 +113,84 @@ const HistoryLogsPanel: React.FC = () => {
             key: 'quality_code',
             render: (status: string) => (
                 <Tag color={status === 'good' ? 'success' : 'error'}>
-                    {status.toUpperCase()}
+                    {status ? status.toUpperCase() : 'UNKNOWN'}
                 </Tag>
             )
         }
     ];
 
+    const selectedTableInfo = tables.find(t => t.table_name === selectedTableName);
+
     return (
-        <Card title="History Logs" bordered={false} bodyStyle={{ padding: '0 24px 24px' }}>
-            <div style={{ marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Space>
-                    <Select
-                        showSearch
-                        placeholder="Select Device"
-                        style={{ width: 250 }}
-                        allowClear
-                        onChange={setSelectedDevice}
-                        optionFilterProp="children"
-                    >
-                        {devices.map(d => (
-                            <Option key={d.id} value={d.id}>{d.device_name}</Option>
-                        ))}
-                    </Select>
+        <Card title="History Logs" variant="borderless" styles={{ body: { padding: '0 24px 24px' } }}>
+            <div style={{ marginBottom: 24, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <Space direction="vertical" style={{ width: '100%' }}>
 
-                    <RangePicker
-                        showTime
-                        onChange={(dates) => setDateRange(dates as any)}
-                        style={{ width: 350 }}
-                    />
+                    <Space size="large" style={{ marginBottom: 10 }}>
+                        <Select
+                            showSearch
+                            placeholder="Select Data Point"
+                            style={{ width: 400 }}
+                            allowClear
+                            onChange={(val) => {
+                                setSelectedTableName(val);
+                                setCurrentPage(1);
+                            }}
+                            value={selectedTableName}
+                            optionFilterProp="children"
+                            filterOption={(input, option) =>
+                                (option?.children as unknown as string).toLowerCase().includes(input.toLowerCase())
+                            }
+                        >
+                            {tables.map(t => (
+                                <Option key={t.table_name} value={t.table_name}>
+                                    {t.device_name} - {t.point_name}
+                                </Option>
+                            ))}
+                        </Select>
 
-                    <Button
-                        type="primary"
-                        icon={<SearchOutlined />}
-                        onClick={() => { setCurrentPage(1); fetchLogs(); }}
-                    >
-                        Search
-                    </Button>
-                    <Button
-                        icon={<ReloadOutlined />}
-                        onClick={fetchLogs}
-                    >
-                        Refresh
-                    </Button>
+                        <RangePicker
+                            showTime
+                            onChange={(dates) => setDateRange(dates as any)}
+                            style={{ width: 350 }}
+                        />
+
+                        <Button
+                            type="primary"
+                            icon={<SearchOutlined />}
+                            onClick={() => { setCurrentPage(1); fetchLogs(); }}
+                            disabled={!selectedTableName}
+                        >
+                            Search
+                        </Button>
+                        <Button
+                            icon={<ReloadOutlined />}
+                            onClick={fetchLogs}
+                            disabled={!selectedTableName}
+                        >
+                            Refresh
+                        </Button>
+                    </Space>
+
+                    {selectedTableInfo && (
+                        <Descriptions size="small" bordered column={2}>
+                            <Descriptions.Item label="Device">{selectedTableInfo.device_name}</Descriptions.Item>
+                            <Descriptions.Item label="Point">{selectedTableInfo.point_name}</Descriptions.Item>
+                            <Descriptions.Item label="Table Name">{selectedTableInfo.table_name}</Descriptions.Item>
+                        </Descriptions>
+                    )}
                 </Space>
             </div>
 
             <Table
                 columns={columns}
                 dataSource={logs}
-                rowKey={(record) => `${record.timestamp}-${record.device_name}-${record.point_name}`}
+                rowKey="timestamp"
                 loading={loading}
                 pagination={false}
                 size="middle"
                 scroll={{ y: 600 }}
+                locale={{ emptyText: selectedTableName ? 'No data' : 'Please select a data point' }}
             />
 
             <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>

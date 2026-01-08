@@ -1,4 +1,4 @@
-import { sql } from './src/db';
+import { sql } from '../src/db';
 
 const BASE_URL = 'http://localhost:3000';
 
@@ -12,8 +12,8 @@ const BASE_URL = 'http://localhost:3000';
 // The task asks to verify API. Let's try to verify via Service calls directly to avoid network/auth complexity for this quick check.
 // Importing services directly is easier.
 
-import { locationsService } from './src/services/locations.service';
-import { devicesService } from './src/services/devices.service';
+import { locationsService } from '../src/services/locations.service';
+import { devicesService } from '../src/services/devices.service';
 
 async function verify() {
     console.log('🧪 Verifying App 4 Services...');

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Switch, Form, Input, Button, Drawer, Space, Tag, message } from 'antd'
+import { Table, Switch, Form, Input, Button, Drawer, Space, Tag, message, Select } from 'antd'
 import { EditOutlined, HistoryOutlined } from '@ant-design/icons'
 import { authFetch } from '../../utils/authFetch'
 
@@ -194,6 +194,13 @@ export const DeviceConfigPanel = ({ selectedLocation, refreshTrigger, onNavigate
 
                     <Form.Item name="is_history_enabled" valuePropName="checked" label="History Logging">
                         <Switch />
+                    </Form.Item>
+
+                    <Form.Item name="logging_type" label="Logging Mode" initialValue="COV">
+                        <Select>
+                            <Select.Option value="COV">COV (Change of Value)</Select.Option>
+                            <Select.Option value="INTERVAL">Interval (Forced)</Select.Option>
+                        </Select>
                     </Form.Item>
 
 

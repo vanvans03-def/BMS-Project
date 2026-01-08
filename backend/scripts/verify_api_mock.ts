@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia'
-import { reportsRoutes } from './src/routes/reports.routes'
+import { reportsRoutes } from '../src/routes/reports.routes'
 
 async function verify() {
     console.log('🧪 Verifying Reports API (Mock Server)...')

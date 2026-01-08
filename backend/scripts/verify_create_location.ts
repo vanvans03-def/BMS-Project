@@ -1,8 +1,8 @@
-import { location } from './src/db' // Wait, need to use fetch or service directly?
+import { location } from '../src/db' // Wait, need to use fetch or service directly?
 // Better to use fetch if I want to test the full route, but service is faster for logic check.
 // Let's use the service directly to avoid needing a running server.
-import { locationsService } from './src/services/locations.service';
-import { sql } from './src/db';
+import { locationsService } from '../src/services/locations.service';
+import { sql } from '../src/db';
 
 async function test() {
     console.log('Testing Location Creation and Retrieval...');

@@ -1,4 +1,5 @@
 import { sql } from '../db'
+import { historyTableService } from './history-table.service'
 import { bacnetService } from './bacnet.service'
 import { settingsService } from './settings.service'
 import type { CreateDeviceDto, CreateDevicePayload } from '../dtos/bacnet.dto'
@@ -64,6 +65,7 @@ export const devicesService = {
 
   // [NEW] ฟังก์ชันอัปเดตข้อมูลอุปกรณ์ (เช่น Polling Interval)
   async updateDevice(id: number, data: {
+    logging_type: undefined
     polling_interval?: number | null,
     device_name?: string,
     location_id?: number | null,
@@ -77,6 +79,7 @@ export const devicesService = {
 
       if (data.location_id !== undefined) updates.location_id = data.location_id
       if (data.is_history_enabled !== undefined) updates.is_history_enabled = data.is_history_enabled
+      if (data.logging_type !== undefined) updates.logging_type = data.logging_type
 
 
 
@@ -85,6 +88,12 @@ export const devicesService = {
       await sql`
         UPDATE devices SET ${sql(updates)} WHERE id = ${id}
       `
+
+      // [NEW] Provision Tables if History Enabled
+      if (updates.is_history_enabled === true) {
+        historyTableService.provisionTablesForDevice(id).catch(err => console.error('Provisioning failed', err))
+      }
+
       return { success: true, message: 'Device updated successfully' }
     } catch (error) {
       console.error('Update device error:', error)

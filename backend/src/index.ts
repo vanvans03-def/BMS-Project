@@ -14,6 +14,7 @@ import { locationsRoutes } from './routes/locations.routes' // [NEW]
 import { historyLogRoutes } from './routes/history-logs.routes' // [NEW]
 import { reportsRoutes } from './routes/reports.routes' // [NEW]
 import { historyLoggerService } from './services/history-logger.service'
+import { historyCleanupService } from './services/history-cleanup.service'
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback'
@@ -58,6 +59,7 @@ const app = new Elysia()
   .listen(3000)
 
 historyLoggerService.start()
+historyCleanupService.start()
 
 console.log(`🦊 Backend is running at ${app.server?.hostname}:${app.server?.port}`)
 

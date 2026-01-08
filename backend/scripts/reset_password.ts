@@ -1,4 +1,4 @@
-import { sql } from './src/db'
+import { sql } from '../src/db'
 
 async function resetAdmin() {
     const password = 'password'
