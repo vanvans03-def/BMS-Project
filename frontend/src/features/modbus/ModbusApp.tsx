@@ -457,16 +457,38 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
       </Modal>
 
       {/* Other Modals... (Add Point, Write, Profile) */}
-      <Modal title="Add Modbus Point" open={isPointModalOpen} onCancel={() => setIsPointModalOpen(false)} footer={null}>
-        {/* ... Form Content ... */}
+    <Modal title="Add Modbus Point" open={isPointModalOpen} onCancel={() => setIsPointModalOpen(false)} footer={null}>
         <Form form={formPoint} layout="vertical" onFinish={handleAddPoint}>
           <Form.Item name="name" label="Point Name" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="registerType" label="Register Type" initialValue="HOLDING_REGISTER"><Select><Select.Option value="COIL">Coil</Select.Option><Select.Option value="HOLDING_REGISTER">Holding Register</Select.Option></Select></Form.Item>
+          
+          <Form.Item name="registerType" label="Register Type" initialValue="HOLDING_REGISTER">
+            <Select>
+              <Select.Option value="COIL">Coil</Select.Option>
+              <Select.Option value="HOLDING_REGISTER">Holding Register</Select.Option>
+              {/* [NEW] เพิ่มตัวเลือกนี้ครับ */}
+              <Select.Option value="INPUT_REGISTER">Input Register</Select.Option>
+            </Select>
+          </Form.Item>
+
           <Row gutter={16}>
             <Col span={12}><Form.Item name="address" label="Address" rules={[{ required: true }]}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
             <Col span={12}><Form.Item name="dataType" label="Data Type" initialValue="INT16"><Select><Select.Option value="INT16">INT16</Select.Option><Select.Option value="UINT16">UINT16</Select.Option><Select.Option value="BOOL">Boolean</Select.Option></Select></Form.Item></Col>
           </Row>
-          <Form.Item name="dataFormat" label="Format" initialValue="RAW"><Select><Select.Option value="RAW">Raw</Select.Option><Select.Option value="TEMP_C_100">Temp /100</Select.Option><Select.Option value="TEMP_C_10">Temp /10</Select.Option></Select></Form.Item>
+          <Form.Item name="dataFormat" label="Format" initialValue="RAW">
+            <Select>
+              <Select.Option value="RAW">Raw</Select.Option>
+
+              <Select.Option value="TEMP_C_100">Temp /100 (°C)</Select.Option>
+              <Select.Option value="TEMP_C_10">Temp /10 (°C)</Select.Option>
+
+              <Select.Option value="HUMIDITY_10">Humidity /10 (%RH)</Select.Option>
+
+              <Select.Option value="SCALE_0.1">Scale /10 (Generic)</Select.Option>
+              <Select.Option value="SCALE_0.01">Scale /100 (Generic)</Select.Option>
+
+              <Select.Option value="VOLT_V">Voltage (V)</Select.Option>
+            </Select>
+          </Form.Item>
           <Button type="primary" htmlType="submit" block>Add Point</Button>
         </Form>
       </Modal>

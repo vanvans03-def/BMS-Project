@@ -2,11 +2,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Table, Tag, Button, Typography, Badge, Space, Popconfirm } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { 
-  EditOutlined, 
-  ThunderboltOutlined, 
-  NumberOutlined, 
-  DeleteOutlined 
+import {
+  EditOutlined,
+  ThunderboltOutlined,
+  NumberOutlined,
+  DeleteOutlined,
+  DatabaseOutlined // [NEW] เพิ่ม Icon สำหรับ Input Register
 } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import { AnimatedNumber } from '../../components/AnimatedNumber'
@@ -27,7 +28,7 @@ interface Props {
 export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDelete }: Props) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
-  
+
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -49,7 +50,7 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       setTimeout(() => setUpdatedPoints(new Set()), 800)
     }
   }, [pointValues])
-  
+
   const columns: ColumnsType<Point> = [
     {
       title: 'Type',
@@ -59,16 +60,21 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       render: (type: string | undefined) => {
         let color = 'default'
         let icon = <NumberOutlined />
-        
-        if (type === 'COIL') { 
+
+        if (type === 'COIL') {
           color = 'green'
-          icon = <ThunderboltOutlined /> 
+          icon = <ThunderboltOutlined />
         }
-        if (type === 'HOLDING_REGISTER') { 
+        if (type === 'HOLDING_REGISTER') {
           color = 'blue'
-          icon = <NumberOutlined /> 
+          icon = <NumberOutlined />
         }
-        
+        // [NEW] เพิ่มการแสดงผล Input Register
+        if (type === 'INPUT_REGISTER') {
+          color = 'cyan'
+          icon = <DatabaseOutlined />
+        }
+
         return (
           <Tag color={color} icon={icon}>
             {type?.replace('_', ' ') ?? 'UNKNOWN'}
@@ -91,17 +97,26 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       render: (text) => <Text strong>{text}</Text>
     },
     {
-      title: 'Format', // [NEW] แสดง Format ที่เลือก
+      title: 'Format',
       dataIndex: 'data_format',
       key: 'format',
       width: 120,
       responsive: ['lg'],
       render: (fmt) => {
-          if (!fmt || fmt === 'RAW') return <Tag>Raw</Tag>
-          if (fmt === 'TEMP_C_100') return <Tag color="orange">Temp ÷100</Tag>
-          if (fmt === 'TEMP_C_10') return <Tag color="orange">Temp ÷10</Tag>
-          if (fmt === 'VOLT_V') return <Tag color="cyan">Voltage</Tag>
-          return <Tag>{fmt}</Tag>
+        if (!fmt || fmt === 'RAW') return <Tag>Raw</Tag>
+
+        // Temp
+        if (fmt === 'TEMP_C_100') return <Tag color="orange">Temp ÷100</Tag>
+        if (fmt === 'TEMP_C_10') return <Tag color="orange">Temp ÷10</Tag>
+
+        if (fmt === 'HUMIDITY_10') return <Tag color="blue">Humid ÷10</Tag>
+
+        if (fmt === 'SCALE_0.1') return <Tag>Scale ÷10</Tag>
+        if (fmt === 'SCALE_0.01') return <Tag>Scale ÷100</Tag>
+
+        if (fmt === 'VOLT_V') return <Tag color="cyan">Voltage</Tag>
+
+        return <Tag>{fmt}</Tag>
       }
     },
     {
@@ -115,73 +130,93 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
         let content = <Badge status="default" text="-" />
 
         if (data) {
-            // Case 1: COIL (Boolean)
-            if (record.register_type === 'COIL') {
-                const isOn = data.value === true || data.value === 1 || data.value === 'true'
-                content = (
-                    <Badge 
-                      status={isOn ? 'success' : 'default'} 
-                      text={isOn ? 'ON' : 'OFF'} 
-                    />
-                )
-            } 
-            // Case 2: Holding Register (Number)
-            else {
-                let displayVal = Number(data.value)
-                let decimals = 0
-                let suffix = ''
+          // Case 1: COIL (Boolean)
+          if (record.register_type === 'COIL') {
+            const isOn = data.value === true || data.value === 1 || data.value === 'true'
+            content = (
+              <Badge
+                status={isOn ? 'success' : 'default'}
+                text={isOn ? 'ON' : 'OFF'}
+              />
+            )
+          }
+          // Case 2: Number (Holding & Input Register)
+          else {
+            let displayVal = Number(data.value)
+            let decimals = 0
+            let suffix = ''
 
-                // [UPDATED] Logic การแปลงค่าตาม Format ที่เลือก
-                switch (record.data_format) {
-                    case 'TEMP_C_100': // กรณี 2050 -> 20.50
-                        displayVal = displayVal / 100
-                        decimals = 2
-                        suffix = ' °C'
-                        break
-                    case 'TEMP_C_10': // กรณี 205 -> 20.5
-                        displayVal = displayVal / 10
-                        decimals = 1
-                        suffix = ' °C'
-                        break
-                    case 'VOLT_V': // แสดงหน่วย V
-                        suffix = ' V'
-                        break
-                    default: // RAW หรืออื่นๆ
-                        break
-                }
+            switch (record.data_format) {
+              case 'TEMP_C_100':
+                displayVal = displayVal / 100
+                decimals = 2
+                suffix = ' °C'
+                break
+              case 'TEMP_C_10':
+                displayVal = displayVal / 10
+                decimals = 1
+                suffix = ' °C'
+                break
 
-                // ถ้าค่าไม่ใช่ตัวเลข (เช่น Error หรือ null)
-                if (isNaN(displayVal)) {
-                    content = <Text type="secondary">Error</Text>
-                } else {
-                    content = (
-                        <div style={{ display: 'flex', alignItems: 'baseline' }}>
-                            <Text style={{ color: '#faad14', fontSize: 16, fontWeight: 500 }}>
-                                <AnimatedNumber value={displayVal} decimals={decimals} />
-                            </Text>
-                            {suffix && (
-                                <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
-                                    {suffix}
-                                </Text>
-                            )}
-                        </div>
-                    )
-                }
+              // ✅ [NEW] เพิ่ม Case Humidity
+              case 'HUMIDITY_10':
+                displayVal = displayVal / 10
+                decimals = 1
+                suffix = ' %RH'  // ใส่หน่วยเปอร์เซ็นต์
+                break
+
+              // ✅ [NEW] เพิ่ม Case Generic
+              case 'SCALE_0.1':
+                displayVal = displayVal / 10
+                decimals = 1
+                suffix = ''
+                break
+              case 'SCALE_0.01':
+                displayVal = displayVal / 100
+                decimals = 2
+                suffix = ''
+                break
+
+              case 'VOLT_V':
+                suffix = ' V'
+                break
+
+              default:
+                break
             }
+
+            // ถ้าค่าไม่ใช่ตัวเลข (เช่น Error หรือ null)
+            if (isNaN(displayVal)) {
+              content = <Text type="secondary">Error</Text>
+            } else {
+              content = (
+                <div style={{ display: 'flex', alignItems: 'baseline' }}>
+                  <Text style={{ color: '#faad14', fontSize: 16, fontWeight: 500 }}>
+                    <AnimatedNumber value={displayVal} decimals={decimals} />
+                  </Text>
+                  {suffix && (
+                    <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
+                      {suffix}
+                    </Text>
+                  )}
+                </div>
+              )
+            }
+          }
         }
 
         return (
-            <div
-              style={{
-                padding: "4px 8px",
-                borderRadius: "4px",
-                transition: "all 0.5s ease",
-                backgroundColor: isUpdated ? "rgba(250, 173, 20, 0.2)" : "transparent",
-                border: isUpdated ? "1px solid rgba(250, 173, 20, 0.4)" : "1px solid transparent",
-              }}
-            >
-              {content}
-            </div>
+          <div
+            style={{
+              padding: "4px 8px",
+              borderRadius: "4px",
+              transition: "all 0.5s ease",
+              backgroundColor: isUpdated ? "rgba(250, 173, 20, 0.2)" : "transparent",
+              border: isUpdated ? "1px solid rgba(250, 173, 20, 0.4)" : "1px solid transparent",
+            }}
+          >
+            {content}
+          </div>
         )
       }
     },
@@ -192,11 +227,13 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       width: 120,
       render: (_, record) => (
         <Space>
-          <Button 
-            size="small" 
-            icon={<EditOutlined />} 
+          <Button
+            size="small"
+            icon={<EditOutlined />}
             onClick={() => onWrite(record)}
             title="Write Value"
+            // [NEW] ปิดปุ่มเขียนค่า ถ้าเป็น Input Register (Read-only)
+            disabled={record.register_type === 'INPUT_REGISTER'}
           />
           <Popconfirm
             title="Delete Point"
@@ -205,8 +242,8 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
             okText="Yes"
             cancelText="No"
           >
-            <Button 
-              size="small" 
+            <Button
+              size="small"
               danger
               icon={<DeleteOutlined />}
               title="Delete Point"
@@ -223,7 +260,7 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       dataSource={points}
       rowKey="id"
       loading={loading}
-      pagination={{ 
+      pagination={{
         current: currentPage,
         pageSize: pageSize,
         total: points.length,

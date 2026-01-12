@@ -25,7 +25,6 @@ export const modbusService = {
     const client = await connectClient(deviceIp, port, unitId)
     try {
       const data = await client.readCoils(address, 1)
-      // [FIXED] ใช้ ?? null เพื่อจัดการกรณี undefined
       return data.data[0] ?? null
     } catch (error) {
       console.error(`❌ Read Coil Error:`, error)
@@ -38,12 +37,28 @@ export const modbusService = {
   async readHoldingRegister(deviceIp: string, port: number, unitId: number, address: number): Promise<number | null> {
     const client = await connectClient(deviceIp, port, unitId)
     try {
+      // Function 03: Read Holding Registers
       const data = await client.readHoldingRegisters(address, 1)
-      // [FIXED] ใช้ ?? null เพื่อจัดการกรณี undefined
       return data.data[0] ?? null
     } catch (error) {
-      console.error(`❌ Read Register Error:`, error)
+      console.error(`❌ Read Holding Register Error:`, error)
       return null
+    } finally {
+      client.close()
+    }
+  },
+
+  // [NEW] เพิ่มฟังก์ชันสำหรับอ่าน Input Register (Function 04)
+  // ใช้แก้ปัญหา error "Illegal data address" สำหรับเซนเซอร์ XY-MD02
+  async readInputRegister(deviceIp: string, port: number, unitId: number, address: number): Promise<number | null> {
+    const client = await connectClient(deviceIp, port, unitId)
+    try {
+      // Function 04: Read Input Registers
+      const data = await client.readInputRegisters(address, 1)
+      return data.data[0] ?? null
+    } catch (error) {
+      console.error(`❌ Read Input Register Error:`, error)
+      throw error // โยน error ออกไปเพื่อให้เห็นปัญหาชัดเจน (เช่น Timeout)
     } finally {
       client.close()
     }
@@ -69,12 +84,17 @@ export const modbusService = {
       port = parseInt(parts[1]) || 502
     }
 
+    // [UPDATED] เพิ่มเงื่อนไขเลือกประเภท Register
     if (info.register_type === 'COIL') {
       return await this.readCoil(ip, port, info.unit_id, info.address)
     } 
-    if (info.register_type === 'HOLDING_REGISTER') {
+    else if (info.register_type === 'HOLDING_REGISTER') {
       return await this.readHoldingRegister(ip, port, info.unit_id, info.address)
     }
+    else if (info.register_type === 'INPUT_REGISTER') {
+      return await this.readInputRegister(ip, port, info.unit_id, info.address)
+    }
+
     return null
   },
 
@@ -164,8 +184,19 @@ export const modbusService = {
 
   async testConnection(deviceIp: string, port: number, unitId: number): Promise<boolean> {
     try {
-      const val = await this.readHoldingRegister(deviceIp, port, unitId, 0)
-      return val !== null
+      // ลองอ่าน Holding Register 0 ก่อน ถ้าไม่ได้ลอง Input Register 0
+      try {
+        const val = await this.readHoldingRegister(deviceIp, port, unitId, 0)
+        if (val !== null) return true
+      } catch (e) { /* ignore */ }
+
+      // Fallback: ลองอ่าน Input Register ดูบ้าง (เผื่อเป็น Device ที่ไม่มี Holding)
+      try {
+        const valInput = await this.readInputRegister(deviceIp, port, unitId, 0)
+        if (valInput !== null) return true
+      } catch (e) { /* ignore */ }
+
+      return false
     } catch {
       return false
     }
