@@ -65,7 +65,7 @@ export const devicesService = {
 
   // [NEW] ฟังก์ชันอัปเดตข้อมูลอุปกรณ์ (เช่น Polling Interval)
   async updateDevice(id: number, data: {
-    logging_type: undefined
+    logging_type?: string
     polling_interval?: number | null,
     device_name?: string,
     location_id?: number | null,

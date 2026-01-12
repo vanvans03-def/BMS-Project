@@ -43,6 +43,7 @@ export const devicesRoutes = new Elysia({ prefix: '/devices' })
 
       location_id: t.Optional(t.Nullable(t.Number())),
       is_history_enabled: t.Optional(t.Boolean()),
+      logging_type: t.Optional(t.String()),
 
       // New Report Fields
       // Removed: floor, room, zone, etc. (Moved to Hierarchy)
