@@ -58,6 +58,9 @@ export const monitorService = {
           // 2. Loop through points using EXISTING connection
           for (const point of points) {
             try {
+              // [FIX] Add small delay to prevent device overwhelm
+              await new Promise(resolve => setTimeout(resolve, 100))
+
               let val = null
               // Use the new WithClient methods
               if (client) {
