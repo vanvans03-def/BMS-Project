@@ -2,16 +2,16 @@ import ModbusRTU from 'modbus-serial'
 import { sql } from '../db'
 import { settingsService } from './settings.service'
 
-const connectClient = async (ip: string, port: number, unitId: number) => {
+export const connectClient = async (ip: string, port: number, unitId: number) => {
   const client = new ModbusRTU()
   try {
     const settings = await settingsService.getSettings()
     const timeout = Number(settings.modbus_timeout) || 5000
-    
+
     client.setTimeout(timeout)
     await client.connectTCP(ip, { port: port })
     client.setID(unitId)
-    
+
     return client
   } catch (error) {
     console.error(`❌ [Modbus] Connection Failed (${ip}:${port}):`, error)
@@ -20,12 +20,14 @@ const connectClient = async (ip: string, port: number, unitId: number) => {
 }
 
 export const modbusService = {
-  
+
+  // Public Client Connection for Reuse
+  connect: connectClient,
+
   async readCoil(deviceIp: string, port: number, unitId: number, address: number): Promise<boolean | null> {
     const client = await connectClient(deviceIp, port, unitId)
     try {
-      const data = await client.readCoils(address, 1)
-      return data.data[0] ?? null
+      return await this.readCoilWithClient(client, address)
     } catch (error) {
       console.error(`❌ Read Coil Error:`, error)
       return null
@@ -34,12 +36,20 @@ export const modbusService = {
     }
   },
 
+  async readCoilWithClient(client: ModbusRTU, address: number): Promise<boolean | null> {
+    try {
+      const data = await client.readCoils(address, 1)
+      return data.data[0] ?? null
+    } catch (error) {
+      // Don't close client here, let caller handle it
+      throw error
+    }
+  },
+
   async readHoldingRegister(deviceIp: string, port: number, unitId: number, address: number): Promise<number | null> {
     const client = await connectClient(deviceIp, port, unitId)
     try {
-      // Function 03: Read Holding Registers
-      const data = await client.readHoldingRegisters(address, 1)
-      return data.data[0] ?? null
+      return await this.readHoldingRegisterWithClient(client, address)
     } catch (error) {
       console.error(`❌ Read Holding Register Error:`, error)
       return null
@@ -48,19 +58,35 @@ export const modbusService = {
     }
   },
 
-  // [NEW] เพิ่มฟังก์ชันสำหรับอ่าน Input Register (Function 04)
-  // ใช้แก้ปัญหา error "Illegal data address" สำหรับเซนเซอร์ XY-MD02
+  async readHoldingRegisterWithClient(client: ModbusRTU, address: number): Promise<number | null> {
+    try {
+      // Function 03: Read Holding Registers
+      const data = await client.readHoldingRegisters(address, 1)
+      return data.data[0] ?? null
+    } catch (error) {
+      throw error
+    }
+  },
+
   async readInputRegister(deviceIp: string, port: number, unitId: number, address: number): Promise<number | null> {
     const client = await connectClient(deviceIp, port, unitId)
+    try {
+      return await this.readInputRegisterWithClient(client, address)
+    } catch (error) {
+      console.error(`❌ Read Input Register Error:`, error)
+      throw error
+    } finally {
+      client.close()
+    }
+  },
+
+  async readInputRegisterWithClient(client: ModbusRTU, address: number): Promise<number | null> {
     try {
       // Function 04: Read Input Registers
       const data = await client.readInputRegisters(address, 1)
       return data.data[0] ?? null
     } catch (error) {
-      console.error(`❌ Read Input Register Error:`, error)
-      throw error // โยน error ออกไปเพื่อให้เห็นปัญหาชัดเจน (เช่น Timeout)
-    } finally {
-      client.close()
+      throw error
     }
   },
 
@@ -87,7 +113,7 @@ export const modbusService = {
     // [UPDATED] เพิ่มเงื่อนไขเลือกประเภท Register
     if (info.register_type === 'COIL') {
       return await this.readCoil(ip, port, info.unit_id, info.address)
-    } 
+    }
     else if (info.register_type === 'HOLDING_REGISTER') {
       return await this.readHoldingRegister(ip, port, info.unit_id, info.address)
     }
@@ -121,7 +147,7 @@ export const modbusService = {
     try {
       console.log(`📝 [Modbus] Writing Coil: ${info.address} -> ${value}`)
       await client.writeCoil(info.address, value)
-      
+
       const { auditLogService } = await import('./audit-log.service')
       await auditLogService.recordLog({
         user_name: userName,
@@ -130,7 +156,7 @@ export const modbusService = {
         details: `Set to ${value ? 'ON' : 'OFF'}`,
         protocol: 'MODBUS'
       })
-      
+
       return true
     } catch (error) {
       console.error(`❌ Write Coil Error:`, error)
@@ -163,7 +189,7 @@ export const modbusService = {
     try {
       console.log(`📝 [Modbus] Writing Register: ${info.address} -> ${value}`)
       await client.writeRegister(info.address, value)
-      
+
       const { auditLogService } = await import('./audit-log.service')
       await auditLogService.recordLog({
         user_name: userName,
@@ -172,7 +198,7 @@ export const modbusService = {
         details: `Set to ${value}`,
         protocol: 'MODBUS'
       })
-      
+
       return true
     } catch (error) {
       console.error(`❌ Write Register Error:`, error)
