@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { historyReportService } from '../services/history-report.service'
-import { startOfDay, endOfDay, subDays } from 'date-fns'
+import { subDays } from 'date-fns'
 
 export const reportsRoutes = new Elysia({ prefix: '/api/reports' })
     .get('/history', async ({ query }) => {

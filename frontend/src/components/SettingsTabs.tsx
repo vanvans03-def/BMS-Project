@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import {
     Form, Input, InputNumber, Button, Card,
     Alert, Table, Space, Popconfirm, Statistic,
-    Row, Col, message, Typography, Divider, Modal, Select, Spin, Tag, Drawer, Descriptions
+    Row, Col, message, Typography, Divider, Modal, Select, Spin, Tag
 } from 'antd'
 import {
     SaveOutlined, ApiOutlined, DatabaseOutlined,
@@ -102,10 +102,10 @@ export const GeneralSettings = () => {
                     <Divider />
 
                     <div data-aos="fade-up" data-aos-delay="250">
-                        <Button 
-                            type="primary" 
-                            htmlType="submit" 
-                            icon={<SaveOutlined />} 
+                        <Button
+                            type="primary"
+                            htmlType="submit"
+                            icon={<SaveOutlined />}
                             loading={loading}
                             block={window.innerWidth < 576}
                         >
@@ -219,10 +219,10 @@ export const NetworkSettings = () => {
                 <Divider />
 
                 <div data-aos="fade-up" data-aos-delay="200">
-                    <Button 
-                        type="primary" 
-                        htmlType="submit" 
-                        icon={<SaveOutlined />} 
+                    <Button
+                        type="primary"
+                        htmlType="submit"
+                        icon={<SaveOutlined />}
                         loading={loading}
                         block={window.innerWidth < 576}
                     >
@@ -241,8 +241,8 @@ export const UserSettings = () => {
     const [users, setUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [isModalOpen, setIsModalOpen] = useState(false)
-    const [isDrawerOpen, setIsDrawerOpen] = useState(false)
-    const [selectedUser, setSelectedUser] = useState<any>(null)
+
+
     const [editingUser, setEditingUser] = useState<any>(null)
     const [form] = Form.useForm()
     const [messageApi, contextHolder] = message.useMessage()
@@ -480,8 +480,8 @@ export const UserSettings = () => {
                     showSizeChanger: true,
                     showQuickJumper: window.innerWidth >= 768,
                     pageSizeOptions: ['10', '20', '50', '100'],
-                    showTotal: (total, range) => 
-                        window.innerWidth >= 768 
+                    showTotal: (total, range) =>
+                        window.innerWidth >= 768
                             ? `${range[0]}-${range[1]} of ${total} users`
                             : `${range[0]}-${range[1]}/${total}`,
                     onChange: (page, newPageSize) => {
@@ -713,7 +713,7 @@ export const DatabaseSettings = ({ filterProtocol = 'all' }: DatabaseSettingsPro
                             <Statistic
                                 title="Active Devices"
                                 value={stats.activeDevices || 0}
-                                valueStyle={{ 
+                                valueStyle={{
                                     color: '#52c41a',
                                     fontSize: window.innerWidth < 768 ? '20px' : '24px'
                                 }}

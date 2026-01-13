@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Table, Switch, Form, Input, Button, Drawer, Space, Tag, message, Select } from 'antd'
-import { EditOutlined, HistoryOutlined } from '@ant-design/icons'
+import { EditOutlined } from '@ant-design/icons'
 import { authFetch } from '../../utils/authFetch'
 
 import AOS from 'aos'

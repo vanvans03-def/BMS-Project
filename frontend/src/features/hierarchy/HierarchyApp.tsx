@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react"
-import { Layout, Card, Typography, Button, Space, Divider, message, Spin, Empty } from "antd"
-import { DatabaseOutlined, ApartmentOutlined } from "@ant-design/icons"
+import { Layout, Card, Typography, Divider } from "antd"
+import { ApartmentOutlined } from "@ant-design/icons"
 import AOS from 'aos'
 import { DashboardLayout } from "../../components/layout/DashboardLayout"
-import { authFetch } from "../../utils/authFetch"
+
 import { LocationTreePanel } from "./LocationTreePanel"
 import { UnassignedDevicesPanel } from "./UnassignedDevicesPanel"
 import { DeviceConfigPanel } from "./DeviceConfigPanel"
@@ -22,7 +22,7 @@ interface HierarchyAppProps {
 export default function HierarchyApp({ onBack, onNavigate }: HierarchyAppProps) {
     const [selectedLocation, setSelectedLocation] = useState<any>(null)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
-    const [messageApi, contextHolder] = message.useMessage()
+
 
     const triggerRefresh = () => setRefreshTrigger(prev => prev + 1)
 
@@ -40,7 +40,7 @@ export default function HierarchyApp({ onBack, onNavigate }: HierarchyAppProps) 
             currentView="hierarchy"
             onMenuClick={() => { }}
         >
-            {contextHolder}
+
             <Layout style={{ height: 'calc(100vh - 100px)', padding: 12, background: 'transparent' }}>
                 {/* Panel A: Tree */}
                 <Sider

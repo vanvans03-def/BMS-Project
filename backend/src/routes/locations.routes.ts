@@ -1,4 +1,4 @@
-import { Elysia, t } from 'elysia'
+import { Elysia } from 'elysia'
 import { locationsService } from '../services/locations.service'
 import { CreateLocationDto, UpdateLocationDto } from '../dtos/locations.dto'
 

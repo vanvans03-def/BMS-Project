@@ -2,7 +2,7 @@ import { sql } from '../db'
 import { historyTableService } from './history-table.service'
 import { bacnetService } from './bacnet.service'
 import { settingsService } from './settings.service'
-import type { CreateDeviceDto, CreateDevicePayload } from '../dtos/bacnet.dto'
+import type { CreateDevicePayload } from '../dtos/bacnet.dto'
 
 export const devicesService = {
   // ... (getAllDevices, discoverDevices, addDevices เดิมคงไว้) ...

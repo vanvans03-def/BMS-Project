@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { LogsPage } from '../../components/LogsPage'
 import { Tabs } from 'antd'
 import HistoryLogsPanel from './HistoryLogsPanel'
+import HistoryGraphPanel from './HistoryGraphPanel'
 import { ProfileModal } from '../../components/ProfileModal'
 
 const { Header, Content } = Layout
@@ -105,6 +106,11 @@ export default function CentralLogsApp({ onBack }: CentralLogsAppProps) {
               key: 'history',
               label: 'History Logs',
               children: <HistoryLogsPanel />
+            },
+            {
+              key: 'graph',
+              label: 'Graph',
+              children: <HistoryGraphPanel />
             }
           ]} />
         </Content>

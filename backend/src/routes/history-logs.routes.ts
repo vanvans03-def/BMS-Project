@@ -157,3 +157,44 @@ export const historyLogRoutes = new Elysia({ prefix: '/api/history-logs' })
             endDate: t.Optional(t.String())
         })
     })
+    .post('/query', async ({ body }) => {
+        const { tables, startDate, endDate } = body
+
+        if (!Array.isArray(tables) || tables.length === 0) {
+            throw new Error('Tables array is required')
+        }
+
+        const start = startDate ? new Date(startDate) : new Date(Date.now() - 24 * 60 * 60 * 1000) // Default 24h
+        const end = endDate ? new Date(endDate) : new Date()
+
+        // Validate table names
+        for (const tableName of tables) {
+            if (!/^table_[a-z0-9_]+$/.test(tableName)) {
+                throw new Error(`Invalid table name: ${tableName}`)
+            }
+        }
+
+        const results = await Promise.all(tables.map(async (tableName) => {
+            const logs = await sql`
+                SELECT timestamp, value
+                FROM ${sql(tableName)}
+                WHERE timestamp >= ${start} AND timestamp <= ${end}
+                ORDER BY timestamp ASC
+            `
+            return {
+                tableName,
+                data: logs.map(l => ({
+                    timestamp: l.timestamp,
+                    value: l.value
+                }))
+            }
+        }))
+
+        return results
+    }, {
+        body: t.Object({
+            tables: t.Array(t.String()),
+            startDate: t.Optional(t.String()),
+            endDate: t.Optional(t.String())
+        })
+    })

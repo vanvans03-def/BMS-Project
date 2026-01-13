@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { devicesService } from '../services/devices.service'
-import type { CreateDeviceDto } from '../dtos/bacnet.dto'
+
 
 export const devicesRoutes = new Elysia({ prefix: '/devices' })
 

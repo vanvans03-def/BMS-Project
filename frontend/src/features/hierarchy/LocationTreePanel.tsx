@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Tree, Button, Space, Tooltip, Dropdown, Modal, Form, Input, Select, message } from 'antd'
+import { Tree, Button, Dropdown, Modal, Form, Input, Select, message } from 'antd'
 import {
     PlusOutlined, FolderOutlined, HomeOutlined,
     AppstoreOutlined, DeleteOutlined, EditOutlined, MoreOutlined
@@ -16,7 +16,7 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
     const [locations, setLocations] = useState<any[]>([])
     const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]) // [NEW] Control expansion
     const [autoExpandParent, setAutoExpandParent] = useState(true)    // [NEW]
-    const [loading, setLoading] = useState(false)
+
     const [messageApi, contextHolder] = message.useMessage()
 
     // Add/Edit Modal
@@ -26,7 +26,7 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
     const [form] = Form.useForm()
 
     const fetchLocations = async () => {
-        setLoading(true)
+
         try {
             const res = await authFetch('/locations')
             const data = await res.json()
@@ -39,7 +39,7 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
         } catch (err) {
             messageApi.error('Failed to load locations')
         } finally {
-            setLoading(false)
+
         }
     }
 
