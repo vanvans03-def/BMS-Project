@@ -8,8 +8,17 @@ export const connectClient = async (ip: string, port: number, unitId: number) =>
     const settings = await settingsService.getSettings()
     const timeout = Number(settings.modbus_timeout) || 5000
 
+    // [SAFEGUARD] Ensure IP is clean
+    let targetIp = ip
+    let targetPort = port
+    if (ip && ip.includes(':')) {
+      const parts = ip.split(':')
+      targetIp = parts[0]
+      targetPort = parseInt(parts[1]) || port
+    }
+
     client.setTimeout(timeout)
-    await client.connectTCP(ip, { port: port })
+    await client.connectTCP(targetIp, { port: targetPort })
     client.setID(unitId)
 
     return client
