@@ -38,31 +38,34 @@ export const monitorService = {
           port = parseInt(parts[1]) || 502
         }
 
-        let client = null
-        try {
-          // 1. Establish SINGLE connection for the whole batch
-          if (ip) {
+        let client: any = null
+
+        // Helper to connect/reconnect
+        const ensureConnected = async () => {
+          if (client) return client
+          if (!ip) throw new Error('No IP Address')
+          try {
+            // Reuse the same robust connect logic from modbus.service
             client = await modbusService.connect(ip, port, unitId)
-          }
-        } catch (connErr) {
-          console.error(`❌ [Monitor] Failed to connect to ${device.device_name} (${ip})`, connErr)
-          // If connection fails, all points fail
-          return {
-            success: false,
-            message: `Connection failed: ${connErr instanceof Error ? connErr.message : 'Unknown'}`,
-            values: []
+            return client
+          } catch (err) {
+            console.error(`❌ [Monitor] Connect failed: ${ip}`, err)
+            throw err
           }
         }
 
         try {
-          // 2. Loop through points using EXISTING connection
+          // 2. Loop through points using EXISTING connection (with auto-reconnect)
           for (const point of points) {
             try {
-              // [FIX] Add small delay to prevent device overwhelm
-              await new Promise(resolve => setTimeout(resolve, 100))
+              // Reconnect if needed
+              await ensureConnected()
+
+              // Delay to prevent flooding (200ms)
+              await new Promise(resolve => setTimeout(resolve, 200))
 
               let val = null
-              // Use the new WithClient methods
+
               if (client) {
                 const registerType = point.register_type
                 const address = point.object_instance
@@ -85,8 +88,17 @@ export const monitorService = {
                 status: val !== null ? 'ok' : 'error',
                 timestamp: new Date().toISOString()
               })
+
             } catch (err) {
-              console.error(`❌ Error reading point ${point.id}:`, err)
+              console.error(`❌ Error reading point ${point.id} (${point.point_name}):`, err)
+
+              // CRITICAL FIX: Close connection on ANY error (Timeout, Data Error, etc.)
+              if (client) {
+                try { client.close() } catch (e) { }
+                client = null
+                console.warn(`⚠️ [Monitor] Connection closed due to error. Will reconnect for next point.`)
+              }
+
               values.push({
                 pointId: point.id,
                 pointName: point.point_name,
@@ -99,9 +111,9 @@ export const monitorService = {
             }
           }
         } finally {
-          // 3. Close connection ONCE after all points are read
+          // Final cleanup
           if (client) {
-            client.close()
+            try { client.close() } catch (e) { }
           }
         }
       }
