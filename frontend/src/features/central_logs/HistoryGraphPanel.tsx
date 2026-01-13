@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, DatePicker, Select, Button, Space, message, theme, Empty, Spin } from 'antd';
-import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
+import { SearchOutlined, ReloadOutlined, ZoomOutOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
     LineChart,
     Line,
@@ -9,10 +9,12 @@ import {
     CartesianGrid,
     Tooltip,
     Legend,
-    ResponsiveContainer
+    ResponsiveContainer,
+    ReferenceArea
 } from 'recharts';
 import dayjs from 'dayjs';
 import axios from 'axios';
+import * as XLSX from 'xlsx-js-style';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -25,6 +27,7 @@ interface HistoryTable {
 
 interface GraphDataPoint {
     timestamp: string;
+    originalTimestamp: number;
     [key: string]: number | string;
 }
 
@@ -42,6 +45,13 @@ const HistoryGraphPanel: React.FC = () => {
     ]);
     const [data, setData] = useState<GraphDataPoint[]>([]);
     const [loading, setLoading] = useState(false);
+
+    // Zoom state
+    const [left, setLeft] = useState<string | number>('dataMin');
+    const [right, setRight] = useState<string | number>('dataMax');
+    const [refAreaLeft, setRefAreaLeft] = useState<string | number>('');
+    const [refAreaRight, setRefAreaRight] = useState<string | number>('');
+
     const { token } = theme.useToken();
 
     useEffect(() => {
@@ -52,7 +62,7 @@ const HistoryGraphPanel: React.FC = () => {
         try {
             const token = localStorage.getItem('bms_token');
             const response = await axios.get('http://localhost:3000/api/history-logs/tables', {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token} ` }
             });
             setTables(response.data || []);
         } catch (error) {
@@ -65,6 +75,10 @@ const HistoryGraphPanel: React.FC = () => {
         if (selectedTables.length === 0 || !dateRange) return;
 
         setLoading(true);
+        // Reset zoom when fetching new data
+        setLeft('dataMin');
+        setRight('dataMax');
+
         try {
             const token = localStorage.getItem('bms_token');
             const response = await axios.post('http://localhost:3000/api/history-logs/query', {
@@ -72,12 +86,8 @@ const HistoryGraphPanel: React.FC = () => {
                 startDate: dateRange[0].toISOString(),
                 endDate: dateRange[1].toISOString()
             }, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token} ` }
             });
-
-            // Process data for Recharts
-            // Response format: [{ tableName, data: [{ timestamp, value }] }]
-            // We need to merge them by timestamp
 
             const rawResults = response.data;
             const mergedData: Record<string, any> = {};
@@ -85,14 +95,8 @@ const HistoryGraphPanel: React.FC = () => {
             rawResults.forEach((result: any) => {
                 const tableName = result.tableName;
                 result.data.forEach((point: any) => {
-                    // Round timestamp to nearest second or minute to align data points? 
-                    // For now, let's just use the timestamp string. 
-                    // To align points from different devices that might log at slightly different milliseconds,
-                    // we might need some bucketing. But let's try raw first or maybe align to nearest minute.
-                    // For better graph comparison, let's try to keep resolution but formatted.
-
                     const timeKey = dayjs(point.timestamp).format('YYYY-MM-DD HH:mm:ss');
-
+                    // We use the timestamp string as key for merging, but we'll need originalTimestamp for sorting and axis
                     if (!mergedData[timeKey]) {
                         mergedData[timeKey] = {
                             timestamp: timeKey,
@@ -122,7 +126,72 @@ const HistoryGraphPanel: React.FC = () => {
 
     const getPointLabel = (tableName: string) => {
         const table = tables.find(t => t.table_name === tableName);
-        return table ? `${table.device_name} - ${table.point_name}` : tableName;
+        return table ? `${table.device_name} - ${table.point_name} ` : tableName;
+    };
+
+    // Zoom handlers
+    const zoom = () => {
+        if (refAreaLeft === refAreaRight || refAreaRight === '') {
+            setRefAreaLeft('');
+            setRefAreaRight('');
+            return;
+        }
+
+        // Ensure left is smaller than right
+        let nextLeft = refAreaLeft;
+        let nextRight = refAreaRight;
+
+        if (nextLeft > nextRight) {
+            [nextLeft, nextRight] = [nextRight, nextLeft];
+        }
+
+        setRefAreaLeft('');
+        setRefAreaRight('');
+        setLeft(nextLeft);
+        setRight(nextRight);
+    };
+
+    const zoomOut = () => {
+        setLeft('dataMin');
+        setRight('dataMax');
+    };
+
+    const formatXAxis = (tickItem: number) => {
+        return dayjs(tickItem).format('MM-DD HH:mm');
+    };
+
+    const handleExport = () => {
+        if (data.length === 0) {
+            message.warning('No data to export');
+            return;
+        }
+
+        try {
+            const exportData = data.map(item => {
+                const row: any = { Timestamp: item.timestamp };
+                selectedTables.forEach(tableName => {
+                    const label = getPointLabel(tableName);
+                    row[label] = item[tableName] !== undefined ? item[tableName] : '';
+                });
+                return row;
+            });
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+
+            // Adjust column widths
+            const wscols = Object.keys(exportData[0] || {}).map(key => ({
+                wch: Math.max(key.length, 20)
+            }));
+            ws['!cols'] = wscols;
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "History Data");
+            XLSX.writeFile(wb, `history_export_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`);
+            message.success('Export successful');
+        } catch (error) {
+            console.error('Export failed', error);
+            message.error('Failed to export data');
+        }
     };
 
     return (
@@ -172,11 +241,28 @@ const HistoryGraphPanel: React.FC = () => {
                         >
                             Refresh
                         </Button>
+                        <Button
+                            icon={<ZoomOutOutlined />}
+                            onClick={zoomOut}
+                            disabled={data.length === 0 || (left === 'dataMin' && right === 'dataMax')}
+                        >
+                            Zoom Out
+                        </Button>
+                        <Button
+                            icon={<DownloadOutlined />}
+                            onClick={handleExport}
+                            disabled={data.length === 0}
+                        >
+                            Export Excel
+                        </Button>
                     </Space>
                 </Space>
             </div>
 
-            <div style={{ height: 600, width: '100%' }}>
+            <div
+                style={{ height: 600, width: '100%', userSelect: 'none' }}
+                className="graph-container"
+            >
                 {loading ? (
                     <div style={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                         <Spin size="large" />
@@ -191,15 +277,22 @@ const HistoryGraphPanel: React.FC = () => {
                                 left: 20,
                                 bottom: 5,
                             }}
+                            onMouseDown={(e) => e && setRefAreaLeft(e.activeLabel as any)}
+                            onMouseMove={(e) => refAreaLeft && e && setRefAreaRight(e.activeLabel as any)}
+                            onMouseUp={zoom}
                         >
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis
-                                dataKey="timestamp"
+                                dataKey="originalTimestamp"
+                                tickFormatter={formatXAxis}
+                                allowDataOverflow
+                                domain={[left, right]}
+                                type="number"
                                 tick={{ fontSize: 12 }}
-                                minTickGap={30}
                             />
                             <YAxis />
                             <Tooltip
+                                labelFormatter={(label) => dayjs(label).format('YYYY-MM-DD HH:mm:ss')}
                                 contentStyle={{ backgroundColor: token.colorBgElevated, borderColor: token.colorBorder }}
                                 labelStyle={{ color: token.colorText }}
                             />
@@ -215,8 +308,12 @@ const HistoryGraphPanel: React.FC = () => {
                                     dot={false}
                                     strokeWidth={2}
                                     connectNulls
+                                    isAnimationActive={false} // Disable animation for better performance during zoom
                                 />
                             ))}
+                            {refAreaLeft && refAreaRight ? (
+                                <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} />
+                            ) : null}
                         </LineChart>
                     </ResponsiveContainer>
                 ) : (
