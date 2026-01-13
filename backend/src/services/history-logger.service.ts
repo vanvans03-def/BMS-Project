@@ -61,7 +61,7 @@ class HistoryLoggerService {
                 const lastPoll = this.lastPollMap.get(device.id) || 0
 
                 if (now - lastPoll >= interval) {
-                    this.pollDevice(device, now)
+                    await this.pollDevice(device, now)
                 }
             }
 
