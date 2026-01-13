@@ -28,9 +28,15 @@ export const monitorService = {
       // CASE A: MODBUS
       // -------------------------------------------------------
       if (device.protocol === 'MODBUS') {
-        const ip = device.ip_address
+        let ip = device.ip_address
         const unitId = device.unit_id || 1
-        const port = 502 // Default Modbus Port
+        let port = 502 // Default Modbus Port
+
+        if (ip && ip.includes(':')) {
+          const parts = ip.split(':')
+          ip = parts[0]
+          port = parseInt(parts[1]) || 502
+        }
 
         let client = null
         try {
