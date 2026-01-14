@@ -6,9 +6,7 @@ import {
 } from '@ant-design/icons'
 import { useAuth } from '../../contexts/AuthContext'
 import { LogsPage } from '../../components/LogsPage'
-import { Tabs } from 'antd'
-import HistoryLogsPanel from './HistoryLogsPanel'
-import HistoryGraphPanel from './HistoryGraphPanel'
+
 import { ProfileModal } from '../../components/ProfileModal'
 
 const { Header, Content } = Layout
@@ -96,23 +94,7 @@ export default function CentralLogsApp({ onBack }: CentralLogsAppProps) {
             minHeight: "calc(100vh - 64px - 32px)",
           }}
         >
-          <Tabs defaultActiveKey="audit" items={[
-            {
-              key: 'audit',
-              label: 'Audit Logs',
-              children: <LogsPage />
-            },
-            {
-              key: 'history',
-              label: 'History Logs',
-              children: <HistoryLogsPanel />
-            },
-            {
-              key: 'graph',
-              label: 'Graph',
-              children: <HistoryGraphPanel />
-            }
-          ]} />
+          <LogsPage />
         </Content>
       </Layout>
 

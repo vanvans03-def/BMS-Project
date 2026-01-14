@@ -1,95 +1,108 @@
 import { sql } from '../db'
 
-export interface AuditLog {
-  id?: number
-  timestamp?: string
-  user_name: string
-  action_type: 'WRITE' | 'SETTING' | 'USER' | 'SYSTEM'
-  target_name: string
-  details: string
-  protocol?: 'BACNET' | 'MODBUS' | 'ALL'
+export interface AuditLogEntry {
+  userId?: number
+  action: string
+  target?: string
+  protocol?: string
+  details?: any
+  ipAddress?: string
+  // Legacy support compatibility
+  user_name?: string
+  action_type?: string
+  target_name?: string
+}
+
+export interface AuditLogFilters {
+  search?: string
+  actionType?: string
+  startDate?: string
+  endDate?: string
+  user?: string
+  protocols?: string
+  limit?: number
+  offset?: number
 }
 
 export const auditLogService = {
   /**
-   * บันทึก Log ใหม่
+   * Log an event
+   * Supports both new (userId) and legacy (user_name) args by resolving user if needed.
    */
-  async recordLog(log: AuditLog) {
+  async log(entry: AuditLogEntry) {
     try {
+      let uid = entry.userId
+      const action = entry.action || entry.action_type || 'UNKNOWN'
+      const target = entry.target || entry.target_name || ''
+      const details = entry.details
+
+      // Resolve user_name to id if userId is missing
+      if (!uid && entry.user_name) {
+        const users = await sql`SELECT id FROM users WHERE username = ${entry.user_name}`
+        if (users.length > 0) uid = users[0]!.id
+      }
+
+      // If still no uid, maybe system action? or default to null?
+      // Table expects integer, maybe nullable? Migration 13 says user_id INTEGER REFERENCES users(id). 
+      // If we can't find user, we might fail constraint. 
+      // Let's check if nullable. Usually yes unless NOT NULL specified. Migration 13 didn't say NOT NULL for user_id.
+
       await sql`
-        INSERT INTO audit_logs (user_name, action_type, target_name, details, protocol, timestamp)
-        VALUES (
-            ${log.user_name}, 
-            ${log.action_type}, 
-            ${log.target_name}, 
-            ${log.details}, 
-            ${log.protocol || 'ALL'},
-            NOW()
-        )
+        INSERT INTO audit_logs (user_id, action, target, protocol, details, ip_address)
+        VALUES (${uid || null}, ${action}, ${target || null}, ${entry.protocol || null}, ${details || null}, ${entry.ipAddress || null})
       `
     } catch (error) {
-      console.error('❌ Failed to record audit log:', error)
+      console.error('❌ Failed to create audit log:', error)
     }
   },
 
+  // Alias for compatibility with users.service.ts
+  async recordLog(entry: any) {
+    return this.log({
+      ...entry,
+      action: entry.action_type, // Map legacy field
+      target: entry.target_name
+    })
+  },
+
   /**
-   * ดึง Logs พร้อม Filter
-   * [UPDATED] เพิ่ม protocols filter (array string)
+   * Get audit logs with advanced filtering
    */
-  async getLogs(filters: { 
-    search?: string, 
-    actionType?: string, 
-    startDate?: string, 
-    endDate?: string,
-    user?: string,
-    protocols?: string // รับเป็น string ขั้นด้วย comma เช่น "BACNET,ALL"
-  }) {
-    const conditions = []
-    
-    if (filters.search) {
-      conditions.push(sql`(target_name ILIKE ${`%${filters.search}%`} OR details ILIKE ${`%${filters.search}%`})`)
-    }
-    
-    if (filters.actionType && filters.actionType !== 'all') {
-      const typeMap: Record<string, string> = {
-        'write': 'WRITE',
-        'setting': 'SETTING',
-        'user': 'USER'
-      }
-      const dbType = typeMap[filters.actionType] || filters.actionType.toUpperCase()
-      conditions.push(sql`action_type = ${dbType}`)
+  async getLogs(filters: AuditLogFilters = {}) {
+    let { search, actionType, startDate, endDate, user, protocols, limit = 100, offset = 0 } = filters
+
+    // [FIX] Adjust endDate to include the full day
+    if (endDate && endDate.length === 10) {
+      endDate = `${endDate} 23:59:59.999`
     }
 
-    if (filters.user && filters.user !== 'all') {
-        conditions.push(sql`user_name ILIKE ${filters.user}`)
+    try {
+      const result = await sql`
+        SELECT 
+          l.id,
+          l.created_at as timestamp,
+          u.username as user_name,
+          l.action as action_type,
+          l.target as target_name,
+          l.details,
+          l.protocol
+        FROM audit_logs l
+        LEFT JOIN users u ON l.user_id = u.id
+        WHERE 1 = 1
+        ${search ? sql`AND (l.target ILIKE ${`%${search}%`} OR l.details::text ILIKE ${`%${search}%`})` : sql``}
+        ${actionType ? sql`AND l.action = ${actionType}` : sql``}
+        ${user ? sql`AND u.username = ${user}` : sql``}
+        ${protocols ? sql`AND l.protocol IN ${sql(protocols.split(','))}` : sql``}
+        ${startDate ? sql`AND l.created_at >= ${startDate}` : sql``}
+        ${endDate ? sql`AND l.created_at <= ${endDate}` : sql``}
+        ORDER BY l.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `
+
+      return Array.isArray(result) ? [...result] : []
+    } catch (error) {
+      console.error('❌ Failed to fetch audit logs:', error)
+      return []
     }
-
-    // [UPDATED] Logic กรอง Protocol
-    if (filters.protocols && filters.protocols !== 'all') {
-        const protocolList = filters.protocols.split(',').map(p => p.trim().toUpperCase())
-        if (protocolList.length > 0) {
-            conditions.push(sql`protocol IN ${sql(protocolList)}`)
-        }
-    }
-
-    if (filters.startDate && filters.endDate) {
-       const start = new Date(filters.startDate).toISOString()
-       const end = new Date(filters.endDate)
-       end.setHours(23, 59, 59, 999)
-       conditions.push(sql`timestamp BETWEEN ${start} AND ${end.toISOString()}`)
-    }
-
-    const whereClause = conditions.length > 0 
-      ? sql`WHERE ${conditions.reduce((a, b) => sql`${a} AND ${b}`)}` 
-      : sql``
-
-    const result = await sql`
-      SELECT * FROM audit_logs 
-      ${whereClause}
-      ORDER BY timestamp DESC 
-      LIMIT 100
-    `
-
-    return [...result]
   }
 }

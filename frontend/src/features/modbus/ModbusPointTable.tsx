@@ -7,7 +7,8 @@ import {
   ThunderboltOutlined,
   NumberOutlined,
   DeleteOutlined,
-  DatabaseOutlined // [NEW] เพิ่ม Icon สำหรับ Input Register
+  DatabaseOutlined, // [NEW] เพิ่ม Icon สำหรับ Input Register
+  LineChartOutlined
 } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import { AnimatedNumber } from '../../components/AnimatedNumber'
@@ -23,9 +24,10 @@ interface Props {
   loading: boolean
   onWrite: (point: Point) => void
   onDelete: (pointId: number) => void
+  onViewHistory: (point: Point) => void // [NEW]
 }
 
-export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDelete }: Props) => {
+export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDelete, onViewHistory }: Props) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
 
@@ -234,6 +236,12 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
             title="Write Value"
             // [NEW] ปิดปุ่มเขียนค่า ถ้าเป็น Input Register (Read-only)
             disabled={record.register_type === 'INPUT_REGISTER'}
+          />
+          <Button
+            size="small"
+            icon={<LineChartOutlined />}
+            onClick={() => onViewHistory(record)}
+            title="View History"
           />
           <Popconfirm
             title="Delete Point"

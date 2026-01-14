@@ -26,6 +26,7 @@ async function verify() {
             type: 'Building',
             description: 'Created by verify script'
         });
+        if (!loc) throw new Error('Failed to create location');
         console.log('   ✅ Location Created:', loc);
 
         // 2. Discover/Get a Device (or create one if empty)
@@ -42,28 +43,31 @@ async function verify() {
                 network_number: 0,
                 protocol: 'BACNET'
             }]);
-            targetDevice = newDevs.added > 0 ? (await devicesService.getAllDevices()).find(d => d.device_instance_id === 9999) : null;
+            targetDevice = newDevs.added > 0 ? (await devicesService.getAllDevices()).find(d => d.device_instance_id === 9999) : undefined;
         }
 
         if (!targetDevice) throw new Error('Could not get a target device');
-        console.log(`   Target Device ID: ${targetDevice.id}`);
+
+        // Store verified device to help TypeScript understand it's defined
+        const verifiedDevice = targetDevice;
+        console.log(`   Target Device ID: ${verifiedDevice.id}`);
 
         // 3. Update Device with Location & History
         console.log('3. Updating Device with Location & History...');
-        const updateResult = await devicesService.updateDevice(targetDevice.id, {
+        const updateResult = await devicesService.updateDevice(verifiedDevice.id, {
             location_id: loc.id,
-            is_history_enabled: true,
-            phase: '3'
+            is_history_enabled: true
         });
         console.log('   ✅ Update Result:', updateResult);
 
         // 4. Verify Update
-        const checkDevice = (await devicesService.getAllDevices()).find(d => d.id === targetDevice.id);
+        const checkDevice = (await devicesService.getAllDevices()).find(d => d.id === verifiedDevice.id);
+        if (!checkDevice) throw new Error('Device not found after update');
+
         console.log('   Current Device State:', {
             id: checkDevice.id,
             location_id: checkDevice.location_id,
-            is_history_enabled: checkDevice.is_history_enabled,
-            phase: checkDevice.phase
+            is_history_enabled: checkDevice.is_history_enabled
         });
 
         if (checkDevice.location_id === loc.id && checkDevice.is_history_enabled === true) {
@@ -75,7 +79,7 @@ async function verify() {
         // 5. Cleanup
         console.log('5. Cleanup...');
         // Unassign first
-        await devicesService.updateDevice(targetDevice.id, { location_id: null });
+        await devicesService.updateDevice(verifiedDevice.id, { location_id: null });
         // Delete location
         await locationsService.deleteLocation(loc.id);
         console.log('   ✅ Cleanup Done');

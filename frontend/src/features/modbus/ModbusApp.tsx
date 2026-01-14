@@ -1,12 +1,13 @@
 /* eslint-disable no-empty */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Statistic, Tabs } from 'antd'
 import {
   ReloadOutlined, PlusOutlined, DatabaseOutlined,
   HddOutlined, ThunderboltOutlined, ArrowLeftOutlined,
-  GlobalOutlined, ApiOutlined, UserOutlined, SaveOutlined
+  GlobalOutlined, ApiOutlined, SaveOutlined, FileTextOutlined,
+  WifiOutlined, LineChartOutlined
 } from '@ant-design/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import AOS from 'aos'
@@ -16,15 +17,17 @@ import { DashboardLayout } from '../../components/layout/DashboardLayout'
 import { ModbusDeviceTable } from './ModbusDeviceTable'
 import { ModbusPointTable } from './ModbusPointTable'
 import { WriteValueModal } from '../../components/WriteValueModal'
-import { GeneralSettings, UserSettings, DatabaseSettings } from '../../components/SettingsTabs'
+import { GeneralSettings, DatabaseSettings } from '../../components/SettingsTabs'
 import { LogsPage } from '../../components/LogsPage'
 import { ProfileModal } from '../../components/ProfileModal'
+import HistoryGraphPanel from '../central_logs/HistoryGraphPanel'
+import HistoryLogsPanel from '../central_logs/HistoryLogsPanel'
 
 import type { Device, Point, PointValue } from '../../types/common'
 
 const { Title, Text } = Typography
 
-// Modbus Network Settings Component (Code เดิม)
+// Modbus Network Settings Component
 const ModbusNetworkSettings = () => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
@@ -71,10 +74,10 @@ const ModbusNetworkSettings = () => {
   )
 }
 
-interface ModbusAppProps { onBack: () => void; initialDeviceId?: number | null }
+interface ModbusAppProps { onBack: () => void; initialDeviceId?: number | null; initialView?: string }
 
-export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
-  const [currentView, setCurrentView] = useState<string>(initialDeviceId ? "loading" : "dashboard")
+export default function ModbusApp({ onBack, initialDeviceId, initialView }: ModbusAppProps) {
+  const [currentView, setCurrentView] = useState<string>(initialDeviceId ? "loading" : (initialView || "dashboard"))
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -83,8 +86,9 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
   const [isPointModalOpen, setIsPointModalOpen] = useState(false)
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [historyPoint, setHistoryPoint] = useState<Point | null>(null)
 
-  // [NEW] Edit Polling State
+  // Edit Polling State
   const [isEditPollingOpen, setIsEditPollingOpen] = useState(false)
   const [deviceToEdit, setDeviceToEdit] = useState<Device | null>(null)
   const [formEditPolling] = Form.useForm()
@@ -115,7 +119,7 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
     refetchInterval: 10000
   })
 
-  // [NEW] Auto-select device from navigation
+  // Auto-select device from navigation
   useEffect(() => {
     if (initialDeviceId && devices) {
       if (!selectedDevice) {
@@ -133,19 +137,19 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
 
   const { data: points, isLoading: loadingPoints, refetch: refetchPoints } = useQuery<Point[]>({
     queryKey: ['modbus-points', selectedDevice?.id],
-    enabled: !!selectedDevice && currentView === 'detail',
+    enabled: !!selectedDevice && (currentView === 'detail' || currentView === 'points'),
     queryFn: async () => (await authFetch(`/points/${selectedDevice!.id}`)).json()
   })
 
   // Polling Logic
   useEffect(() => {
-    if (currentView !== 'detail' || !selectedDevice) return
+    if ((currentView !== 'detail' && currentView !== 'points') || !selectedDevice) return
 
     const effectiveInterval = selectedDevice.polling_interval
       ? Math.max(selectedDevice.polling_interval, 500)
       : globalPollingInterval
 
-    console.log(`⏱️ Polling: ${effectiveInterval}ms`)
+    // console.log(`⏱️ Polling: ${effectiveInterval}ms`)
 
     const fetchVal = async () => {
       try {
@@ -201,7 +205,6 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
     catch { messageApi.error('Failed') }
   }
 
-  // [NEW] Handler Update Polling
   const handleUpdatePolling = async (values: any) => {
     if (!deviceToEdit) return
     try {
@@ -214,14 +217,12 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
       setDeviceToEdit(null)
       refetchDevices()
 
-      // ถ้าเป็น Device ที่กำลังดูอยู่ ให้ update state เพื่อให้ polling เปลี่ยนทันที
       if (selectedDevice?.id === deviceToEdit.id) {
         setSelectedDevice(prev => prev ? { ...prev, polling_interval: values.pollingInterval || null } : null)
       }
     } catch { messageApi.error('Update failed') }
   }
 
-  // Other handlers
   const handleAddPoint = async (values: any) => {
     if (!selectedDevice) return
     try {
@@ -270,10 +271,8 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
       const isCoil = writingPoint.register_type === 'COIL'
       const endpoint = isCoil ? '/modbus/write-coil' : '/modbus/write-register'
 
-      // Prepare value
       let payloadValue: any = writeValue
       if (isCoil) {
-        // Convert 'active'/1/true -> true, etc.
         payloadValue = (writeValue === 'active' || writeValue === 1 || writeValue === 'true')
       } else {
         payloadValue = Number(writeValue)
@@ -292,7 +291,6 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
       if (data.success) {
         messageApi.success('Write command sent')
         setIsWriteModalOpen(false)
-        // Refresh values after a short delay
         setTimeout(refetchPoints, 500)
       } else {
         messageApi.error(data.message || 'Write failed')
@@ -335,10 +333,10 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
           <ModbusDeviceTable
             devices={devices || []}
             loading={loadingDevices}
-            defaultPollingInterval={globalPollingInterval} // [NEW] Pass default
+            defaultPollingInterval={globalPollingInterval}
             onView={(d) => { setSelectedDevice(d); setCurrentView('detail') }}
             onDelete={handleDeleteDevice}
-            onEditPolling={(d) => { setDeviceToEdit(d); formEditPolling.setFieldsValue({ pollingInterval: d.polling_interval }); setIsEditPollingOpen(true); }} // [NEW] Open Edit Modal
+            onEditPolling={(d) => { setDeviceToEdit(d); formEditPolling.setFieldsValue({ pollingInterval: d.polling_interval }); setIsEditPollingOpen(true); }}
           />
         </Card>
       </div>
@@ -347,12 +345,10 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
 
   const renderDetail = () => (
     <>
-      {/* ... Detail Header ... */}
       <div data-aos="fade-down">
         <Card style={{ marginBottom: 16 }}>
           <Row gutter={16} align="middle">
             <Col flex="auto">
-              <Button icon={<ArrowLeftOutlined />} type="link" onClick={() => { setSelectedDevice(null); setCurrentView('dashboard') }}>Back</Button>
               <Title level={4} style={{ margin: 0 }}>{selectedDevice?.device_name}</Title>
               <Text type="secondary"><GlobalOutlined /> {selectedDevice?.ip_address} | Unit ID: {selectedDevice?.unit_id}</Text>
             </Col>
@@ -371,6 +367,7 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
             points={points || []} pointValues={pointValues} loading={loadingPoints}
             onWrite={(p) => { setWritingPoint(p); setWriteValue(""); setIsWriteModalOpen(true) }}
             onDelete={handleDeletePoint}
+            onViewHistory={(p) => setHistoryPoint(p)}
           />
         </Card>
       </div>
@@ -392,22 +389,72 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
     )
   }
 
+  // Dynamic Menu (Updated Structure)
+  const menuItems = useMemo(() => {
+    if (selectedDevice) {
+      return [
+        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to List" },
+        // { type: "divider" },
+        // { key: "points", icon: <ApiOutlined />, label: "Points" },
+      ]
+    }
+    return [
+      { key: "dashboard", icon: <DatabaseOutlined />, label: "Dashboard" },
+      { key: "history-graph", icon: <LineChartOutlined />, label: "History Graph" },
+      { key: "history-logs", icon: <FileTextOutlined />, label: "History Logs" },
+      { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" },
+    ]
+  }, [selectedDevice])
+
   return (
-    <DashboardLayout title="Modbus System" headerIcon={<HddOutlined />} themeColor="#faad14" onBack={onBack} currentView={currentView === 'detail' ? 'dashboard' : currentView} onMenuClick={(k) => { setCurrentView(k); if (k === 'dashboard') setSelectedDevice(null) }} onProfileClick={() => setIsProfileModalOpen(true)}>
+    <DashboardLayout
+      title="Modbus Protocol"
+      headerIcon={<HddOutlined />}
+      themeColor="#faad14"
+      onBack={['dashboard', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined}
+      currentView={currentView === 'points' ? 'detail' : currentView}
+
+      onMenuClick={(k) => { setCurrentView(k); if (k === 'dashboard') setSelectedDevice(null) }}
+      onProfileClick={() => setIsProfileModalOpen(true)}
+      menuItems={menuItems as any}
+      headerActions={null}
+    >
       {contextHolder}
+
+      {/* Level 1 Views */}
       {currentView === 'dashboard' && renderDashboard()}
-      {currentView === 'detail' && renderDetail()}
+
+      {currentView === 'history-graph' && (
+        <Card title="Global History Graph" style={{ height: '100%' }}>
+          <div style={{ height: 'calc(100vh - 250px)' }}>
+            <HistoryGraphPanel initialSelection={[]} />
+          </div>
+        </Card>
+      )}
+
+      {currentView === 'history-logs' && (
+        <div data-aos="fade-up">
+          <Card title="History Logs (Value Trends)">
+            <HistoryLogsPanel />
+          </Card>
+        </div>
+      )}
+
+      {currentView === 'logs' && <LogsPage defaultProtocol="MODBUS" />}
+
+      {/* Level 2 Views */}
+      {(currentView === 'detail' || currentView === 'points') && renderDetail()}
+
+      {/* Settings */}
       {currentView === 'settings' && (
         <Card>
           <Tabs items={[
             { key: 'general', label: <span><GlobalOutlined /> General</span>, children: <GeneralSettings /> },
             { key: 'network', label: <span><ApiOutlined /> Modbus Config</span>, children: <ModbusNetworkSettings /> },
-            { key: 'users', label: <span><UserOutlined /> Users</span>, children: <UserSettings /> },
             { key: 'database', label: <span><DatabaseOutlined /> Database</span>, children: <DatabaseSettings filterProtocol="MODBUS" /> },
           ]} />
         </Card>
       )}
-      {currentView === 'logs' && <LogsPage defaultProtocol="MODBUS" />}
 
       {/* Add Device Modal */}
       <Modal title="Add Modbus Device" open={isDeviceModalOpen} onCancel={() => setIsDeviceModalOpen(false)} footer={null}>
@@ -425,7 +472,7 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
         </Form>
       </Modal>
 
-      {/* [NEW] Edit Polling Modal */}
+      {/* Edit Polling Modal */}
       <Modal
         title="Edit Polling Interval"
         open={isEditPollingOpen}
@@ -456,16 +503,15 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
         </Form>
       </Modal>
 
-      {/* Other Modals... (Add Point, Write, Profile) */}
-    <Modal title="Add Modbus Point" open={isPointModalOpen} onCancel={() => setIsPointModalOpen(false)} footer={null}>
+      {/* Add Point Modal */}
+      <Modal title="Add Modbus Point" open={isPointModalOpen} onCancel={() => setIsPointModalOpen(false)} footer={null}>
         <Form form={formPoint} layout="vertical" onFinish={handleAddPoint}>
           <Form.Item name="name" label="Point Name" rules={[{ required: true }]}><Input /></Form.Item>
-          
+
           <Form.Item name="registerType" label="Register Type" initialValue="HOLDING_REGISTER">
             <Select>
               <Select.Option value="COIL">Coil</Select.Option>
               <Select.Option value="HOLDING_REGISTER">Holding Register</Select.Option>
-              {/* [NEW] เพิ่มตัวเลือกนี้ครับ */}
               <Select.Option value="INPUT_REGISTER">Input Register</Select.Option>
             </Select>
           </Form.Item>
@@ -477,15 +523,11 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
           <Form.Item name="dataFormat" label="Format" initialValue="RAW">
             <Select>
               <Select.Option value="RAW">Raw</Select.Option>
-
               <Select.Option value="TEMP_C_100">Temp /100 (°C)</Select.Option>
               <Select.Option value="TEMP_C_10">Temp /10 (°C)</Select.Option>
-
               <Select.Option value="HUMIDITY_10">Humidity /10 (%RH)</Select.Option>
-
               <Select.Option value="SCALE_0.1">Scale /10 (Generic)</Select.Option>
               <Select.Option value="SCALE_0.01">Scale /100 (Generic)</Select.Option>
-
               <Select.Option value="VOLT_V">Voltage (V)</Select.Option>
             </Select>
           </Form.Item>
@@ -495,6 +537,23 @@ export default function ModbusApp({ onBack, initialDeviceId }: ModbusAppProps) {
 
       <WriteValueModal open={isWriteModalOpen} point={writingPoint} currentValue={getScaledValue(writingPoint, pointValues.get(writingPoint?.id || 0)?.value)} writeValue={writeValue} priority={0} loading={isWriting} onClose={() => setIsWriteModalOpen(false)} onWrite={handleWrite} onValueChange={setWriteValue} onPriorityChange={() => { }} />
       <ProfileModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
+
+      {/* History Modal (Popup) */}
+      <Modal
+        title={null}
+        open={historyPoint !== null}
+        onCancel={() => setHistoryPoint(null)}
+        footer={null}
+        width={1000}
+        styles={{ body: { padding: 0 } }}
+        destroyOnClose
+      >
+        {historyPoint && selectedDevice && (
+          <HistoryGraphPanel
+            initialSelection={[{ deviceName: selectedDevice.device_name, pointName: historyPoint.point_name }]}
+          />
+        )}
+      </Modal>
     </DashboardLayout>
   )
 }

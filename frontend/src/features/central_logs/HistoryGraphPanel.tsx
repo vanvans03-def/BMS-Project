@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, DatePicker, Select, Button, Space, message, theme, Empty, Spin } from 'antd';
+import { Card, DatePicker, Select, TreeSelect, Button, Space, message, theme, Empty, Spin, Tooltip as AntTooltip, Tag } from 'antd';
 import { SearchOutlined, ReloadOutlined, ZoomOutOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
     LineChart,
@@ -17,7 +17,7 @@ import axios from 'axios';
 import * as XLSX from 'xlsx-js-style';
 
 const { RangePicker } = DatePicker;
-const { Option } = Select;
+// const { Option } = Select; // Unused
 
 interface HistoryTable {
     table_name: string;
@@ -36,7 +36,14 @@ const COLORS = [
     '#d0ed57', '#8dd1e1', '#83a6ed', '#8e44ad', '#e74c3c'
 ];
 
-const HistoryGraphPanel: React.FC = () => {
+interface HistoryGraphPanelProps {
+    initialSelection?: { deviceName: string, pointName: string }[]
+    contextDeviceId?: number // If provided, filter dropdown to this device only? Or just pre-select
+    className?: string
+    style?: React.CSSProperties
+}
+
+const HistoryGraphPanel: React.FC<HistoryGraphPanelProps> = ({ initialSelection, className, style }) => {
     const [tables, setTables] = useState<HistoryTable[]>([]);
     const [selectedTables, setSelectedTables] = useState<string[]>([]);
     const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([
@@ -58,13 +65,45 @@ const HistoryGraphPanel: React.FC = () => {
         fetchTables();
     }, []);
 
+    // Effect to handle initial selection once tables are loaded
+    useEffect(() => {
+        if (tables.length > 0 && initialSelection && initialSelection.length > 0) {
+            const preSelected: string[] = []
+            initialSelection.forEach(sel => {
+                // Find table matching device and point
+                // Note: device_name in DB might differ slightly from UI if sanitized usually, 
+                // but here we compare with what the API returns which is from DB table metadata or inferred.
+                // The API /tables returns list of available tables.
+                const match = tables.find(t =>
+                    t.device_name === sel.deviceName &&
+                    t.point_name === sel.pointName
+                )
+                if (match) preSelected.push(match.table_name)
+            })
+            if (preSelected.length > 0) {
+                setSelectedTables(prev => {
+                    // Merge with existing or replace? Replace for "Pre-select" context usually.
+                    // If user is just opening the modal, replace.
+                    return Array.from(new Set([...prev, ...preSelected]))
+                })
+            }
+        }
+    }, [tables, initialSelection])
+
     const fetchTables = async () => {
         try {
+            // Using authFetch instead of axios directly if possible, but keeping axios for now matching file style
+            // Actually, best to use authFetch or handle token from context, but let's stick to existing pattern
             const token = localStorage.getItem('bms_token');
             const response = await axios.get('http://localhost:3000/api/history-logs/tables', {
                 headers: { Authorization: `Bearer ${token} ` }
             });
-            setTables(response.data || []);
+            let data = response.data || []
+
+            // Filter by context if needed (optional)
+            // if (contextDeviceId) { ... } 
+
+            setTables(data);
         } catch (error) {
             console.error('Failed to fetch history tables', error);
             message.error('Failed to load points configuration');
@@ -195,29 +234,48 @@ const HistoryGraphPanel: React.FC = () => {
     };
 
     return (
-        <Card title="History Graph" variant="borderless" styles={{ body: { padding: '0 24px 24px' } }}>
+        <Card title="History Graph" variant="borderless" styles={{ body: { padding: '0 24px 24px' } }} className={className} style={style}>
             <div style={{ marginBottom: 24 }}>
                 <Space direction="vertical" style={{ width: '100%' }}>
                     <Space size="large" style={{ flexWrap: 'wrap' }}>
-                        <Select
-                            mode="multiple"
-                            placeholder="Select Data Points to Compare"
-                            style={{ minWidth: 400, maxWidth: 800 }}
-                            allowClear
+                        <TreeSelect
+                            treeData={Object.entries(
+                                tables.reduce((acc, t) => {
+                                    if (!acc[t.device_name]) acc[t.device_name] = [];
+                                    acc[t.device_name].push(t);
+                                    return acc;
+                                }, {} as Record<string, typeof tables>)
+                            ).map(([device, points]) => ({
+                                title: device,
+                                value: `__DEVICE__${device}`,
+                                key: `__DEVICE__${device}`,
+                                children: points.map(p => ({
+                                    title: p.point_name,
+                                    value: p.table_name,
+                                    key: p.table_name,
+                                }))
+                            }))}
                             value={selectedTables}
-                            onChange={setSelectedTables}
+                            onChange={(newValue) => {
+                                // Filter out device nodes if they somehow get into the selection (though SHOW_CHILD should prevent this for leaf-only strategy)
+                                // Actually SHOW_CHILD triggers check on leaves. 
+                                // Antd TreeSelect:
+                                // If treeCheckable=true and showCheckedStrategy=SHOW_CHILD, onChange returns leaf keys.
+                                setSelectedTables(newValue as string[])
+                            }}
+                            treeCheckable
+                            showCheckedStrategy={TreeSelect.SHOW_CHILD}
+                            placeholder="Select points..."
+                            style={{ width: 400 }}
                             maxTagCount="responsive"
-                            optionFilterProp="children"
-                            filterOption={(input, option) =>
-                                (option?.children as unknown as string).toLowerCase().includes(input.toLowerCase())
-                            }
-                        >
-                            {tables.map(t => (
-                                <Option key={t.table_name} value={t.table_name}>
-                                    {t.device_name} - {t.point_name}
-                                </Option>
-                            ))}
-                        </Select>
+                            maxTagPlaceholder={(omittedValues) => (
+                                <AntTooltip overlayStyle={{ pointerEvents: 'none' }} title={omittedValues.map((v) => <div key={v.value}>{v.label}</div>)}>
+                                    <Tag>+ {omittedValues.length} ...</Tag>
+                                </AntTooltip>
+                            )}
+                            treeDefaultExpandAll
+                            allowClear
+                        />
 
                         <RangePicker
                             showTime

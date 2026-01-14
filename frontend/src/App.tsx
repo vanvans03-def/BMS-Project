@@ -12,7 +12,7 @@ import { PortalPage } from './features/portal/PortalPage'
 import BACnetApp from './features/bacnet/BACnetApp'
 import ModbusApp from './features/modbus/ModbusApp'
 import CentralLogsApp from './features/central_logs/CentralLogsApp'
-import HierarchyApp from './features/hierarchy/HierarchyApp' // [New Import]
+import GlobalSettingsApp from './features/settings/GlobalSettingsApp'
 
 const { Content } = Layout
 
@@ -20,14 +20,22 @@ function App() {
   const { isAuthenticated, isLoading } = useAuth()
 
   // เพิ่ม state 'LOGS', 'HIERARCHY'
-  const [currentSystem, setCurrentSystem] = useState<'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | null>(null)
+  const [currentSystem, setCurrentSystem] = useState<'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS' | null>(null)
 
   // State for Deep Linking
   const [targetDeviceId, setTargetDeviceId] = useState<number | null>(null)
+  const [targetView, setTargetView] = useState<string | undefined>(undefined)
 
   const handleNavigate = (system: 'BACNET' | 'MODBUS', deviceId: number) => {
     setTargetDeviceId(deviceId)
     setCurrentSystem(system)
+  }
+
+  // Update logic to accept view
+  const handleSystemSelect = (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => {
+    setCurrentSystem(system)
+    if (view) setTargetView(view)
+    else setTargetView(undefined)
   }
 
   useEffect(() => {
@@ -49,11 +57,11 @@ function App() {
 
   // Routing Logic
   if (currentSystem === 'BACNET') {
-    return <BACnetApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} />
+    return <BACnetApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} initialView={targetView} />
   }
 
   if (currentSystem === 'MODBUS') {
-    return <ModbusApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} />
+    return <ModbusApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} initialView={targetView} />
   }
 
   if (currentSystem === 'LOGS') {
@@ -61,11 +69,16 @@ function App() {
   }
 
   if (currentSystem === 'HIERARCHY') {
-    return <HierarchyApp onBack={() => setCurrentSystem(null)} onNavigate={handleNavigate} />
+    // Legacy support or direct link
+    return <GlobalSettingsApp onBack={() => setCurrentSystem(null)} />
+  }
+
+  if (currentSystem === 'GLOBAL_SETTINGS') {
+    return <GlobalSettingsApp onBack={() => setCurrentSystem(null)} onNavigate={handleNavigate} />
   }
 
   // Default: Portal
-  return <PortalPage onSelectSystem={setCurrentSystem} />
+  return <PortalPage onSelectSystem={handleSystemSelect as any} />
 }
 
 export default App

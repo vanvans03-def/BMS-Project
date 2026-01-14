@@ -11,6 +11,7 @@ import {
   InfoCircleOutlined,
   EditOutlined,
   ClockCircleOutlined,
+  LineChartOutlined,
 } from "@ant-design/icons"
 import { useEffect, useRef, useState } from "react"
 import { AnimatedNumber } from "../../components/AnimatedNumber"
@@ -39,9 +40,10 @@ interface PointTableProps {
   pointValues: Map<number, PointValue>
   loading: boolean
   onWritePoint: (point: Point) => void
+  onViewHistory: (point: Point) => void // [NEW]
 }
 
-export const PointTable = ({ points, pointValues, loading, onWritePoint }: PointTableProps) => {
+export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewHistory }: PointTableProps) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
 
@@ -245,6 +247,16 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint }: Point
             ) : (
               <Button type="text" size="small" icon={<EditOutlined />} disabled style={{ visibility: "hidden" }} />
             )}
+
+            <Tooltip title="View History">
+              <Button
+                icon={<LineChartOutlined />}
+                size="small"
+                onClick={() => onViewHistory(record)}
+                style={{ transition: "all 0.2s ease" }}
+                className="hover-lift"
+              />
+            </Tooltip>
           </Space>
         )
       },

@@ -5,7 +5,9 @@ import { Button, Input, Space, Typography, Card, message, Badge, Row, Col, Divid
 import {
   SearchOutlined, ReloadOutlined, PlusOutlined, DatabaseOutlined,
   WifiOutlined, ArrowLeftOutlined, SyncOutlined, GlobalOutlined,
-  ApiOutlined, UserOutlined
+  ApiOutlined,
+  FileTextOutlined,
+  LineChartOutlined
 } from "@ant-design/icons"
 import AOS from 'aos'
 
@@ -17,19 +19,21 @@ import { PointTable } from "./PointTable"
 import { DiscoveryModal } from "./DiscoveryModal"
 import { DeviceStatsCards, PointStatsCards } from "../../components/StatsCards"
 import { WriteValueModal } from "../../components/WriteValueModal"
-import { GeneralSettings, NetworkSettings, UserSettings, DatabaseSettings } from "../../components/SettingsTabs"
+import { GeneralSettings, NetworkSettings, DatabaseSettings } from "../../components/SettingsTabs"
 import { LogsPage } from "../../components/LogsPage"
 import { ProfileModal } from "../../components/ProfileModal"
+import HistoryGraphPanel from "../central_logs/HistoryGraphPanel"
+import HistoryLogsPanel from "../central_logs/HistoryLogsPanel"
 
 import type { Device, Point, PointValue } from "../../types/common"
 
 const { Title, Text } = Typography
 
-interface BACnetAppProps { onBack: () => void; initialDeviceId?: number | null }
+interface BACnetAppProps { onBack: () => void; initialDeviceId?: number | null; initialView?: string }
 
-export default function BACnetApp({ onBack, initialDeviceId }: BACnetAppProps) {
+export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACnetAppProps) {
   // [MODIFIED] Start in 'loading' state if we have a target device
-  const [currentView, setCurrentView] = useState<string>(initialDeviceId ? "loading" : "dashboard")
+  const [currentView, setCurrentView] = useState<string>(initialDeviceId ? "loading" : (initialView || "dashboard"))
   const [searchText, setSearchText] = useState("")
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -56,6 +60,7 @@ export default function BACnetApp({ onBack, initialDeviceId }: BACnetAppProps) {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isMonitoring, setIsMonitoring] = useState(false)
+  const [historyPoint, setHistoryPoint] = useState<Point | null>(null)
 
   useEffect(() => { AOS.refresh() }, [currentView, selectedDevice])
 
@@ -228,7 +233,6 @@ export default function BACnetApp({ onBack, initialDeviceId }: BACnetAppProps) {
         <Card style={{ marginBottom: 16 }}>
           <Row gutter={16} align="middle">
             <Col flex="auto">
-              <Button icon={<ArrowLeftOutlined />} type="link" onClick={() => { setSelectedDevice(null); setCurrentView('dashboard') }}>Back</Button>
               <Title level={4} style={{ margin: 0 }}>{selectedDevice?.device_name}</Title>
               <Space split={<Divider type="vertical" />}>
                 <Text type="secondary"><WifiOutlined /> {selectedDevice?.ip_address}</Text>
@@ -248,7 +252,13 @@ export default function BACnetApp({ onBack, initialDeviceId }: BACnetAppProps) {
       <div data-aos="fade-up"><PointStatsCards total={points?.length || 0} monitoring={points?.filter(p => p.is_monitor).length || 0} inputs={0} outputs={0} /></div>
       <div data-aos="fade-up" data-aos-delay="200">
         <Card>
-          <PointTable points={points || []} pointValues={pointValues} loading={isLoadingPoints} onWritePoint={(p) => { setWritingPoint(p); setWriteValue(pointValues.get(p.id)?.value ?? ""); setIsWriteModalOpen(true) }} />
+          <PointTable
+            points={points || []}
+            pointValues={pointValues}
+            loading={isLoadingPoints}
+            onWritePoint={(p) => { setWritingPoint(p); setWriteValue(pointValues.get(p.id)?.value ?? ""); setIsWriteModalOpen(true) }}
+            onViewHistory={(p) => setHistoryPoint(p)}
+          />
         </Card>
       </div>
     </>
@@ -271,55 +281,87 @@ export default function BACnetApp({ onBack, initialDeviceId }: BACnetAppProps) {
     )
   }
 
+  // Dynamic Menu
+  const menuItems = useMemo(() => {
+    if (selectedDevice && currentView !== "loading") {
+      return [
+        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to List" },
+        // { type: "divider" },
+        // { key: "points", icon: <ApiOutlined />, label: "Points" },
+        // History Graph removed from here
+      ]
+    }
+    return [
+      { key: "dashboard", icon: <DatabaseOutlined />, label: "Dashboard" },
+      { key: "history-graph", icon: <LineChartOutlined />, label: "History Graph" }, // [NEW] Moved to Top Level
+      { key: "history-logs", icon: <FileTextOutlined />, label: "History Logs" }, // [NEW] Added
+      { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" }, // Renamed for clarity
+    ]
+  }, [selectedDevice, currentView])
+
   return (
-    <DashboardLayout title="BACnet System" headerIcon={<DatabaseOutlined />} themeColor="#1890ff" onBack={onBack} currentView={currentView === 'detail' ? 'dashboard' : currentView} onMenuClick={handleMenuClick}>
+    <DashboardLayout
+      title="BACnet Protocol"
+      headerIcon={<DatabaseOutlined />}
+      themeColor="#1890ff"
+      onBack={['dashboard', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined}
+      currentView={currentView === 'points' ? 'points' : currentView}
+      onMenuClick={handleMenuClick}
+      menuItems={menuItems as any}
+      headerActions={null}
+    >
       {contextHolder}
+
+      {/* Level 1 Views */}
       {currentView === 'dashboard' && renderDashboard()}
-      {currentView === 'detail' && renderDetail()}
+      {currentView === 'logs' && <LogsPage defaultProtocol="BACNET" />}
+
+      {currentView === 'history-graph' && (
+        <Card title="Global History Graph" style={{ height: '100%' }}>
+          <div style={{ height: 'calc(100vh - 250px)' }}>
+            <HistoryGraphPanel initialSelection={[]} />
+          </div>
+        </Card>
+      )}
+
+      {currentView === 'history-logs' && (
+        <div data-aos="fade-up">
+          <Card title="History Logs (Value Trends)">
+            <HistoryLogsPanel />
+          </Card>
+        </div>
+      )}
+
+      {/* Level 2 Views (Device Selected) */}
+      {(currentView === 'detail' || currentView === 'points') && renderDetail()}
+
+      {/* ... Settings ... */}
       {currentView === 'settings' && (
-        <Card>
+        <Card title="System Settings">
           <Tabs items={[
             { key: 'general', label: <span><GlobalOutlined /> General</span>, children: <GeneralSettings /> },
             { key: 'network', label: <span><ApiOutlined /> Network</span>, children: <NetworkSettings /> },
-            { key: 'users', label: <span><UserOutlined /> Users</span>, children: <UserSettings /> },
             { key: 'database', label: <span><DatabaseOutlined /> Database</span>, children: <DatabaseSettings filterProtocol="BACNET" /> },
           ]} />
         </Card>
       )}
-      {currentView === 'logs' && <LogsPage defaultProtocol="BACNET" />}
 
       <DiscoveryModal open={isDiscoveryModalOpen} loading={isScanning} adding={isAdding} devices={discoveredDevices} selectedRows={selectedDiscoveryRows} existingDeviceIds={existingDeviceIds} onClose={() => setIsDiscoveryModalOpen(false)} onAdd={handleAddSelected} onSelectionChange={setSelectedDiscoveryRows} />
 
-      {/* [NEW] Edit Device Configuration Modal */}
-      <Modal
-        title="Edit Device Configuration"
-        open={isEditPollingOpen}
-        onCancel={() => setIsEditPollingOpen(false)}
-        footer={null}
-        width={400}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Text type="secondary">Target Device: </Text>
-          <Text strong>{deviceToEdit?.device_name}</Text>
-        </div>
+      <Modal title="Edit Device Configuration" open={isEditPollingOpen} onCancel={() => setIsEditPollingOpen(false)} footer={null} width={400}>
+        <div style={{ marginBottom: 16 }}><Text type="secondary">Target Device: </Text><Text strong>{deviceToEdit?.device_name}</Text></div>
         <Form form={formEditPolling} layout="vertical" onFinish={handleUpdateDevice}>
-          <Form.Item
-            name="pollingInterval"
-            label="Polling Interval (ms)"
-            help={`Default: ${globalPollingInterval} ms`}
-          >
-            <InputNumber style={{ width: '100%' }} placeholder="Default" min={1000} step={500} />
-          </Form.Item>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
-            <Button onClick={() => setIsEditPollingOpen(false)}>Cancel</Button>
-            <Button type="primary" htmlType="submit">Save Changes</Button>
-          </div>
+          <Form.Item name="pollingInterval" label="Polling Interval (ms)" help={`Default: ${globalPollingInterval} ms`}><InputNumber style={{ width: '100%' }} placeholder="Default" min={1000} step={500} /></Form.Item>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}><Button onClick={() => setIsEditPollingOpen(false)}>Cancel</Button><Button type="primary" htmlType="submit">Save Changes</Button></div>
         </Form>
       </Modal>
 
       <WriteValueModal open={isWriteModalOpen} point={writingPoint} currentValue={pointValues.get(writingPoint?.id || 0)?.value} writeValue={writeValue} priority={writePriority} loading={isWriting} onClose={() => setIsWriteModalOpen(false)} onWrite={handleWrite} onValueChange={setWriteValue} onPriorityChange={setWritePriority} />
       <ProfileModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
+
+      <Modal title={null} open={historyPoint !== null} onCancel={() => setHistoryPoint(null)} footer={null} width={1000} styles={{ body: { padding: 0 } }} destroyOnClose>
+        {historyPoint && selectedDevice && (<HistoryGraphPanel initialSelection={[{ deviceName: selectedDevice.device_name, pointName: historyPoint.point_name }]} />)}
+      </Modal>
     </DashboardLayout>
   )
 }

@@ -3,11 +3,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 import { useState, useEffect } from 'react'
-import { 
-  Card, DatePicker, Select, Button, Table, Tag, Space, 
-  Row, Col, Typography, message 
+import {
+  Card, DatePicker, Select, Button, Table, Tag, Space,
+  Row, Col, Typography, message
 } from 'antd'
-import { 
+import {
   SearchOutlined, DownloadOutlined, FileTextOutlined,
   UserOutlined, SettingOutlined, EditOutlined, ArrowRightOutlined,
   ApiOutlined, DatabaseOutlined, GlobalOutlined
@@ -15,7 +15,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import AOS from 'aos'
 import dayjs from 'dayjs'
-import * as XLSX from 'xlsx-js-style' 
+import * as XLSX from 'xlsx-js-style'
 import { authFetch } from '../utils/authFetch'
 
 const { Title, Text } = Typography
@@ -40,7 +40,7 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  
+
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([dayjs(), dayjs()])
   const [userFilter, setUserFilter] = useState('all')
   const [actionFilter, setActionFilter] = useState('all')
@@ -70,24 +70,24 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      
+
       if (dateRange && dateRange[0] && dateRange[1]) {
         params.append('startDate', dateRange[0].format('YYYY-MM-DD'))
         params.append('endDate', dateRange[1].format('YYYY-MM-DD'))
       }
-      
+
       if (userFilter !== 'all') params.append('user', userFilter)
       if (actionFilter !== 'all') params.append('actionType', actionFilter)
-      
+
       if (defaultProtocol === 'all') {
-         if (protocolFilter !== 'all') params.append('protocols', protocolFilter)
+        if (protocolFilter !== 'all') params.append('protocols', protocolFilter)
       } else {
-         params.append('protocols', `${defaultProtocol},ALL`)
+        params.append('protocols', `${defaultProtocol},ALL`)
       }
 
       const res = await authFetch(`/audit-logs?${params.toString()}`)
       if (!res.ok) throw new Error('Failed to fetch logs')
-      
+
       const data = await res.json()
       setLogs(data)
       setCurrentPage(1)
@@ -106,65 +106,65 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
     }
 
     const dataToExport = logs.map(log => {
-        let cleanTarget = log.target_name
-        if (cleanTarget && cleanTarget.startsWith('[')) {
-             cleanTarget = cleanTarget.replace('OBJECT_', '').replace(/_/g, ' ')
-        } else if (cleanTarget) {
-             cleanTarget = cleanTarget.replace('OBJECT_', '').replace(/_/g, ' ')
-        }
+      let cleanTarget = log.target_name
+      if (cleanTarget && cleanTarget.startsWith('[')) {
+        cleanTarget = cleanTarget.replace('OBJECT_', '').replace(/_/g, ' ')
+      } else if (cleanTarget) {
+        cleanTarget = cleanTarget.replace('OBJECT_', '').replace(/_/g, ' ')
+      }
 
-        return {
-            ID: log.id,
-            Time: dayjs(log.timestamp).format('DD/MM/YYYY HH:mm:ss'),
-            System: log.protocol || 'ALL',
-            User: log.user_name,
-            Action: log.action_type,
-            Target: cleanTarget,
-            Details: log.details
-        }
+      return {
+        ID: log.id,
+        Time: dayjs(log.timestamp).format('DD/MM/YYYY HH:mm:ss'),
+        System: log.protocol || 'ALL',
+        User: log.user_name,
+        Action: log.action_type,
+        Target: cleanTarget,
+        Details: log.details
+      }
     })
 
     const ws = XLSX.utils.json_to_sheet(dataToExport)
 
     ws['!cols'] = [
-        { wch: 8 },
-        { wch: 20 },
-        { wch: 10 },
-        { wch: 15 },
-        { wch: 12 },
-        { wch: 30 },
-        { wch: 100 }
+      { wch: 8 },
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 30 },
+      { wch: 100 }
     ]
 
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
-    
+
     const borderStyle = {
-        top: { style: 'thin', color: { rgb: "000000" } },
-        bottom: { style: 'thin', color: { rgb: "000000" } },
-        left: { style: 'thin', color: { rgb: "000000" } },
-        right: { style: 'thin', color: { rgb: "000000" } }
+      top: { style: 'thin', color: { rgb: "000000" } },
+      bottom: { style: 'thin', color: { rgb: "000000" } },
+      left: { style: 'thin', color: { rgb: "000000" } },
+      right: { style: 'thin', color: { rgb: "000000" } }
     }
 
     for (let R = range.s.r; R <= range.e.r; ++R) {
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-            const address = XLSX.utils.encode_cell({ r: R, c: C })
-            if (!ws[address]) continue
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const address = XLSX.utils.encode_cell({ r: R, c: C })
+        if (!ws[address]) continue
 
-            if (R === 0) {
-                ws[address].s = {
-                    font: { name: 'Arial', sz: 11, bold: true, color: { rgb: "FFFFFF" } },
-                    fill: { fgColor: { rgb: "1890FF" } },
-                    alignment: { horizontal: "center", vertical: "center" },
-                    border: borderStyle
-                }
-            } else {
-                ws[address].s = {
-                    font: { name: 'Arial', sz: 10 },
-                    alignment: { vertical: "center", wrapText: true, horizontal: "left" },
-                    border: borderStyle
-                }
-            }
+        if (R === 0) {
+          ws[address].s = {
+            font: { name: 'Arial', sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "1890FF" } },
+            alignment: { horizontal: "center", vertical: "center" },
+            border: borderStyle
+          }
+        } else {
+          ws[address].s = {
+            font: { name: 'Arial', sz: 10 },
+            alignment: { vertical: "center", wrapText: true, horizontal: "left" },
+            border: borderStyle
+          }
         }
+      }
     }
 
     const wb = XLSX.utils.book_new()
@@ -177,17 +177,17 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
 
   const formatTargetName = (name: string) => {
     if (name && name.startsWith('[')) {
-        const parts = name.match(/^(\[.*?\])\s*(.*)/)
-        if (parts) {
-            const deviceName = parts[1]
-            const pointName = parts[2].replace('OBJECT_', '').replace(/_/g, ' ')
-            return (
-                <Space direction="vertical" size={0}>
-                    <Text type="secondary" style={{fontSize: 11}}>{deviceName}</Text>
-                    <Text strong style={{fontSize: 13}}>{pointName}</Text>
-                </Space>
-            )
-        }
+      const parts = name.match(/^(\[.*?\])\s*(.*)/)
+      if (parts) {
+        const deviceName = parts[1]
+        const pointName = parts[2].replace('OBJECT_', '').replace(/_/g, ' ')
+        return (
+          <Space direction="vertical" size={0}>
+            <Text type="secondary" style={{ fontSize: 11 }}>{deviceName}</Text>
+            <Text strong style={{ fontSize: 13 }}>{pointName}</Text>
+          </Space>
+        )
+      }
     }
     return <Text>{(name || '').replace('OBJECT_', '').replace(/_/g, ' ')}</Text>
   }
@@ -200,31 +200,31 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
       width: 140,
       render: (text) => (
         <Space direction="vertical" size={0}>
-            <Text>{dayjs(text).format('DD/MM/YYYY')}</Text>
-            <Text type="secondary" style={{fontSize: 12}}>{dayjs(text).format('HH:mm:ss')}</Text>
+          <Text>{dayjs(text).format('DD/MM/YYYY')}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{dayjs(text).format('HH:mm:ss')}</Text>
         </Space>
       )
     },
     {
-        title: 'System',
-        dataIndex: 'protocol',
-        key: 'protocol',
-        width: 100,
-        align: 'center',
-        render: (protocol: string) => {
-            let color = 'default'
-            let icon = <GlobalOutlined />
-            const p = protocol ? protocol.toUpperCase() : 'ALL'
+      title: 'System',
+      dataIndex: 'protocol',
+      key: 'protocol',
+      width: 100,
+      align: 'center',
+      render: (protocol: string) => {
+        let color = 'default'
+        let icon = <GlobalOutlined />
+        const p = protocol ? protocol.toUpperCase() : 'ALL'
 
-            if (p === 'BACNET') { color = 'geekblue'; icon = <ApiOutlined /> }
-            else if (p === 'MODBUS') { color = 'orange'; icon = <DatabaseOutlined /> }
-            
-            return (
-                <Tag color={color} icon={icon} style={{ marginRight: 0 }}>
-                    {p}
-                </Tag>
-            )
-        }
+        if (p === 'BACNET') { color = 'geekblue'; icon = <ApiOutlined /> }
+        else if (p === 'MODBUS') { color = 'orange'; icon = <DatabaseOutlined /> }
+
+        return (
+          <Tag color={color} icon={icon} style={{ marginRight: 0 }}>
+            {p}
+          </Tag>
+        )
+      }
     },
     {
       title: 'User',
@@ -233,8 +233,8 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
       width: 120,
       render: (text) => (
         <Space>
-            <UserOutlined style={{color: '#1890ff'}} />
-            <Text strong>{text}</Text>
+          <UserOutlined style={{ color: '#1890ff' }} />
+          <Text strong>{text}</Text>
         </Space>
       )
     },
@@ -247,13 +247,13 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
       render: (action: string) => {
         let color = 'default'
         let icon = <FileTextOutlined />
-        
+
         if (action === 'WRITE') { color = 'purple'; icon = <EditOutlined /> }
         if (action === 'SETTING') { color = 'blue'; icon = <SettingOutlined /> }
         if (action === 'USER') { color = 'green'; icon = <UserOutlined /> }
 
         return (
-          <Tag color={color} icon={icon} style={{marginRight: 0, minWidth: 80}}>
+          <Tag color={color} icon={icon} style={{ marginRight: 0, minWidth: 80 }}>
             {action}
           </Tag>
         )
@@ -263,7 +263,7 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
       title: 'Target',
       dataIndex: 'target_name',
       key: 'target_name',
-      width: 200, 
+      width: 200,
       render: (text) => formatTargetName(text)
     },
     {
@@ -271,144 +271,153 @@ export const LogsPage = ({ defaultProtocol = 'all' }: LogsPageProps) => {
       dataIndex: 'details',
       key: 'details',
       render: (text) => {
-        if (text && text.includes('->')) {
-            const parts = text.split('->')
-            const oldVal = parts[0].trim()
-            const newValPart = parts[1] ? parts[1].trim() : ''
-            const newVal = newValPart.split('(')[0].trim()
-            const extra = newValPart.includes('(') ? `(${newValPart.split('(')[1]}` : ''
-
-            return (
-                <Space wrap>
-                    <Tag>{oldVal}</Tag>
-                    <ArrowRightOutlined style={{ fontSize: 12, color: '#999' }} />
-                    <Tag color="processing">{newVal}</Tag>
-                    {extra && <Text type="secondary" style={{fontSize: 11}}>{extra}</Text>}
-                </Space>
-            )
+        // [FIX] Handle Object/Array from JSON column
+        if (typeof text === 'object' && text !== null) {
+          try {
+            text = JSON.stringify(text)
+          } catch (e) {
+            text = String(text)
+          }
         }
-        return <Text>{text}</Text>
+
+        if (text && typeof text === 'string' && text.includes('->')) {
+          const parts = text.split('->')
+          const oldVal = parts[0].trim()
+          const newValPart = parts[1] ? parts[1].trim() : ''
+          const newVal = newValPart.split('(')[0].trim()
+          const extra = newValPart.includes('(') ? `(${newValPart.split('(')[1]}` : ''
+
+          return (
+            <Space wrap>
+              <Tag>{oldVal}</Tag>
+              <ArrowRightOutlined style={{ fontSize: 12, color: '#999' }} />
+              <Tag color="processing">{newVal}</Tag>
+              {extra && <Text type="secondary" style={{ fontSize: 11 }}>{extra}</Text>}
+            </Space>
+          )
+        }
+        return <Text>{String(text)}</Text>
       }
     },
   ]
 
   return (
     <>
-        <div style={{ marginBottom: 24 }} data-aos="fade-down">
-            <Title level={3} style={{ margin: 0, marginBottom: 8 }}>
-              <FileTextOutlined /> {defaultProtocol === 'all' ? 'Central Logs' : `${defaultProtocol} Logs`}
-            </Title>
-            <Text type="secondary">
-              {defaultProtocol === 'all' 
-                ? 'Track all system activities across BACnet and Modbus' 
-                : `View logs specific to ${defaultProtocol} system`}
-            </Text>
-        </div>
+      <div style={{ marginBottom: 24 }} data-aos="fade-down">
+        <Title level={3} style={{ margin: 0, marginBottom: 8 }}>
+          <FileTextOutlined /> {defaultProtocol === 'all' ? 'Central Logs' : `${defaultProtocol} Logs`}
+        </Title>
+        <Text type="secondary">
+          {defaultProtocol === 'all'
+            ? 'Track all system activities across BACnet and Modbus'
+            : `View logs specific to ${defaultProtocol} system`}
+        </Text>
+      </div>
 
-        <div data-aos="fade-up" data-aos-delay="100">
-            <Card style={{ marginBottom: 24 }}>
-                <Row gutter={[16, 16]} align="bottom">
-                    <Col xs={24} md={6} lg={5}>
-                        <Text strong>Date Range</Text>
-                        {/* @ts-ignore */}
-                        <RangePicker 
-                            style={{ width: '100%', marginTop: 8 }} 
-                            value={dateRange}
-                            onChange={(dates) => setDateRange(dates as any)}
-                            presets={[
-                                { label: 'Today', value: [dayjs(), dayjs()] },
-                                { label: 'Last 7 Days', value: [dayjs().subtract(7, 'd'), dayjs()] },
-                            ]}
-                        />
-                    </Col>
-                    
-                    {defaultProtocol === 'all' && (
-                        <Col xs={12} md={4} lg={3}>
-                            <Text strong>System</Text>
-                            <Select 
-                                value={protocolFilter}
-                                onChange={setProtocolFilter}
-                                style={{ width: '100%', marginTop: 8 }}
-                                options={[
-                                    { value: 'all', label: 'All Systems' },
-                                    { value: 'BACNET', label: 'BACnet' },
-                                    { value: 'MODBUS', label: 'Modbus' },
-                                ]}
-                            />
-                        </Col>
-                    )}
+      <div data-aos="fade-up" data-aos-delay="100">
+        <Card style={{ marginBottom: 24 }}>
+          <Row gutter={[16, 16]} align="bottom">
+            <Col xs={24} md={6} lg={5}>
+              <Text strong>Date Range</Text>
+              {/* @ts-ignore */}
+              <RangePicker
+                style={{ width: '100%', marginTop: 8 }}
+                value={dateRange}
+                onChange={(dates) => setDateRange(dates as any)}
+                presets={[
+                  { label: 'Today', value: [dayjs(), dayjs()] },
+                  { label: 'Last 7 Days', value: [dayjs().subtract(7, 'd'), dayjs()] },
+                ]}
+              />
+            </Col>
 
-                    <Col xs={12} md={4} lg={3}>
-                        <Text strong>User</Text>
-                        <Select 
-                            value={userFilter}
-                            onChange={setUserFilter}
-                            style={{ width: '100%', marginTop: 8 }}
-                            // [FIXED] กรองเฉพาะ Active User และ Map ข้อมูล
-                            options={[
-                                { value: 'all', label: 'All Users' },
-                                ...userList
-                                    .filter(u => u.is_active) 
-                                    .map(u => ({ value: u.username, label: u.username }))
-                            ]}
-                        />
-                    </Col>
-                    <Col xs={12} md={4} lg={3}>
-                        <Text strong>Action</Text>
-                        <Select 
-                            value={actionFilter}
-                            onChange={setActionFilter}
-                            style={{ width: '100%', marginTop: 8 }}
-                            options={[
-                                { value: 'all', label: 'All' },
-                                { value: 'write', label: 'Write' },
-                                { value: 'setting', label: 'Setting' },
-                                { value: 'user', label: 'User' },
-                            ]}
-                        />
-                    </Col>
-                    <Col xs={24} md={6} lg={defaultProtocol === 'all' ? 10 : 13} style={{ textAlign: 'right' }}>
-                        <Space>
-                            <Button type="primary" icon={<SearchOutlined />} onClick={fetchLogs} loading={loading}>
-                                Search
-                            </Button>
-                            <Button icon={<DownloadOutlined />} onClick={handleExport}>
-                                Export
-                            </Button>
-                        </Space>
-                    </Col>
-                </Row>
-            </Card>
-        </div>
-
-        <div data-aos="fade-up" data-aos-delay="200">
-            <Card title="Log Records">
-                <Table 
-                    columns={columns} 
-                    dataSource={logs} 
-                    rowKey="id"
-                    loading={loading}
-                    pagination={{ 
-                        current: currentPage,
-                        pageSize: pageSize,
-                        total: logs.length,
-                        showSizeChanger: true,
-                        showQuickJumper: true,
-                        pageSizeOptions: ['10', '20', '50', '100'],
-                        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} logs`,
-                        onChange: (page, newPageSize) => {
-                            setCurrentPage(page)
-                            if (newPageSize !== pageSize) {
-                                setPageSize(newPageSize)
-                                setCurrentPage(1)
-                            }
-                        }
-                    }}
-                    scroll={{ x: 900 }} 
-                    size="middle" 
+            {defaultProtocol === 'all' && (
+              <Col xs={12} md={4} lg={3}>
+                <Text strong>System</Text>
+                <Select
+                  value={protocolFilter}
+                  onChange={setProtocolFilter}
+                  style={{ width: '100%', marginTop: 8 }}
+                  options={[
+                    { value: 'all', label: 'All Systems' },
+                    { value: 'BACNET', label: 'BACnet' },
+                    { value: 'MODBUS', label: 'Modbus' },
+                  ]}
                 />
-            </Card>
-        </div>
+              </Col>
+            )}
+
+            <Col xs={12} md={4} lg={3}>
+              <Text strong>User</Text>
+              <Select
+                value={userFilter}
+                onChange={setUserFilter}
+                style={{ width: '100%', marginTop: 8 }}
+                // [FIXED] กรองเฉพาะ Active User และ Map ข้อมูล
+                options={[
+                  { value: 'all', label: 'All Users' },
+                  ...userList
+                    .filter(u => u.is_active)
+                    .map(u => ({ value: u.username, label: u.username }))
+                ]}
+              />
+            </Col>
+            <Col xs={12} md={4} lg={3}>
+              <Text strong>Action</Text>
+              <Select
+                value={actionFilter}
+                onChange={setActionFilter}
+                style={{ width: '100%', marginTop: 8 }}
+                options={[
+                  { value: 'all', label: 'All' },
+                  { value: 'write', label: 'Write' },
+                  { value: 'setting', label: 'Setting' },
+                  { value: 'user', label: 'User' },
+                ]}
+              />
+            </Col>
+            <Col xs={24} md={6} lg={defaultProtocol === 'all' ? 10 : 13} style={{ textAlign: 'right' }}>
+              <Space>
+                <Button type="primary" icon={<SearchOutlined />} onClick={fetchLogs} loading={loading}>
+                  Search
+                </Button>
+                <Button icon={<DownloadOutlined />} onClick={handleExport}>
+                  Export
+                </Button>
+              </Space>
+            </Col>
+          </Row>
+        </Card>
+      </div>
+
+      <div data-aos="fade-up" data-aos-delay="200">
+        <Card title="Log Records">
+          <Table
+            columns={columns}
+            dataSource={logs}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: currentPage,
+              pageSize: pageSize,
+              total: logs.length,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} logs`,
+              onChange: (page, newPageSize) => {
+                setCurrentPage(page)
+                if (newPageSize !== pageSize) {
+                  setPageSize(newPageSize)
+                  setCurrentPage(1)
+                }
+              }
+            }}
+            scroll={{ x: 900 }}
+            size="middle"
+          />
+        </Card>
+      </div>
     </>
   )
 }

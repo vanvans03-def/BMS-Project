@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Layout, Menu, Button, Space, Typography, Dropdown, Avatar, Divider, theme } from 'antd';
 import {
-  AppstoreOutlined, SettingOutlined, FileTextOutlined,
+  AppstoreOutlined, FileTextOutlined,
   ArrowLeftOutlined, UserOutlined, LogoutOutlined, DownOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -13,12 +13,15 @@ interface DashboardLayoutProps {
   title: string;
   headerIcon: React.ReactNode;
   themeColor: string;
-  onBack: () => void;
+  onBack?: () => void;
   currentView: string;
   onMenuClick: (key: string) => void;
   children: React.ReactNode;
   onProfileClick?: () => void;
-  showMenu?: boolean; // [NEW]
+  showMenu?: boolean;
+  menuItems?: any[]; // Allow custom menu items
+  contentStyle?: React.CSSProperties; // Allow custom content styles
+  headerActions?: React.ReactNode;
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
@@ -30,11 +33,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   onMenuClick,
   children,
   onProfileClick,
-  showMenu = true
+  showMenu = true,
+  menuItems,
+  headerActions,
+  contentStyle
 }) => {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
+
+  const defaultMenuItems = [
+    { key: "dashboard", icon: <AppstoreOutlined />, label: "Dashboard" },
+    { key: "logs", icon: <FileTextOutlined />, label: "Logs" },
+  ];
 
   const userMenu = {
     items: [
@@ -70,10 +81,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           zIndex: 1000,
         }}
       >
-        <Space style={{ cursor: 'pointer', marginRight: 16 }} onClick={onBack}>
-          <ArrowLeftOutlined style={{ color: 'white', fontSize: 18 }} />
-          <Text style={{ color: 'white', fontSize: 16, fontWeight: 600 }}>Portal</Text>
-        </Space>
+        {onBack && (
+          <Space style={{ cursor: 'pointer', marginRight: 16 }} onClick={onBack}>
+            <ArrowLeftOutlined style={{ color: 'white', fontSize: 18 }} />
+            <Text style={{ color: 'white', fontSize: 16, fontWeight: 600 }}>Portal</Text>
+          </Space>
+        )}
 
         <Divider type="vertical" style={{ background: 'rgba(255,255,255,0.2)', margin: '0 16px' }} />
 
@@ -86,7 +99,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
         <div style={{ flex: 1 }} />
 
-        <Space>
+        <Space size="middle">
+          {/* Custom Header Actions (e.g. Settings) */}
+          {headerActions}
+
           <Dropdown menu={userMenu} placement="bottomRight" trigger={['click']}>
             <Button type="text" style={{ color: 'white', height: 'auto', padding: '4px 12px' }}>
               <Space>
@@ -115,11 +131,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               mode="inline"
               selectedKeys={[currentView]}
               onClick={({ key }) => onMenuClick(key)}
-              items={[
-                { key: "dashboard", icon: <AppstoreOutlined />, label: "Dashboard" },
-                { key: "settings", icon: <SettingOutlined />, label: "Settings" },
-                { key: "logs", icon: <FileTextOutlined />, label: "Logs" },
-              ]}
+              items={menuItems || defaultMenuItems}
             />
           </Sider>
         )}
@@ -132,6 +144,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               background: colorBgContainer,
               borderRadius: borderRadiusLG,
               minHeight: "calc(100vh - 64px - 32px)",
+              ...contentStyle // Apply custom logic
             }}
           >
             {children}

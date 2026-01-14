@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Table, DatePicker, Select, Button, Tag, Pagination, Card, Space, message, Descriptions } from 'antd';
+import { Table, DatePicker, Select, TreeSelect, Button, Tag, Pagination, Card, Space, message, Descriptions } from 'antd';
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import axios from 'axios';
 
 const { RangePicker } = DatePicker;
-const { Option } = Select;
+// const { Option } = Select; // Unused
 
 interface HistoryLog {
     timestamp: string;
@@ -127,27 +127,36 @@ const HistoryLogsPanel: React.FC = () => {
                 <Space direction="vertical" style={{ width: '100%' }}>
 
                     <Space size="large" style={{ marginBottom: 10 }}>
-                        <Select
+                        <TreeSelect
                             showSearch
-                            placeholder="Select Data Point"
                             style={{ width: 400 }}
+                            value={selectedTableName}
+                            dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
+                            placeholder="Select Data Point"
                             allowClear
+                            treeDefaultExpandAll
                             onChange={(val) => {
                                 setSelectedTableName(val);
                                 setCurrentPage(1);
                             }}
-                            value={selectedTableName}
-                            optionFilterProp="children"
-                            filterOption={(input, option) =>
-                                (option?.children as unknown as string).toLowerCase().includes(input.toLowerCase())
-                            }
-                        >
-                            {tables.map(t => (
-                                <Option key={t.table_name} value={t.table_name}>
-                                    {t.device_name} - {t.point_name}
-                                </Option>
-                            ))}
-                        </Select>
+                            treeData={Object.entries(
+                                tables.reduce((acc, t) => {
+                                    if (!acc[t.device_name]) acc[t.device_name] = [];
+                                    acc[t.device_name].push(t);
+                                    return acc;
+                                }, {} as Record<string, typeof tables>)
+                            ).map(([device, points]) => ({
+                                title: device,
+                                value: `__DEVICE__${device}`,
+                                key: `__DEVICE__${device}`,
+                                selectable: false, // User must select a point, not a device folder
+                                children: points.map(p => ({
+                                    title: p.point_name,
+                                    value: p.table_name,
+                                    key: p.table_name,
+                                }))
+                            }))}
+                        />
 
                         <RangePicker
                             showTime

@@ -77,11 +77,10 @@ class HistoryLoggerService {
         const loggingType = device.logging_type || 'COV' // Default to COV
 
         try {
-            // 1. Fetch Point Metadata (Name) for Table Resolution
-            // optimize: cache this map if needed, but for now DB fetch is robust
-            const pointsMeta = await sql`SELECT id, point_name FROM points WHERE device_id = ${device.id}`
-            const pointNameMap = new Map<number, string>()
-            pointsMeta.forEach(p => pointNameMap.set(p.id, p.point_name))
+            // 1. Fetch Point Metadata (Name & Table) for Table Resolution
+            const pointsMeta = await sql`SELECT id, point_name, report_table_name FROM points WHERE device_id = ${device.id}`
+            const pointMap = new Map<number, { name: string, tableName: string | null }>()
+            pointsMeta.forEach(p => pointMap.set(p.id, { name: p.point_name, tableName: p.report_table_name }))
 
             // 2. Read Values
             const result = await monitorService.readDevicePoints(device.id)
@@ -101,8 +100,8 @@ class HistoryLoggerService {
 
             for (const v of validData) {
                 const pointId = v.pointId
-                const pointName = pointNameMap.get(pointId)
-                if (!pointName) continue // Should not happen if DB integrity OK
+                const meta = pointMap.get(pointId)
+                if (!meta) continue
 
                 const newValue = Number(v.value)
                 const lastCache = this.pointCache.get(pointId)
@@ -111,10 +110,8 @@ class HistoryLoggerService {
                 if (!lastCache) {
                     shouldLog = true
                 } else if (loggingType === 'INTERVAL') {
-                    // INTERVAL Mode: Always log on poll cycle
                     shouldLog = true
                 } else {
-                    // COV Mode: Check deadband or max interval
                     const timeDiff = timestamp - lastCache.timestamp
                     if (timeDiff >= this.MAX_INTERVAL_MS) {
                         shouldLog = true
@@ -132,11 +129,16 @@ class HistoryLoggerService {
 
                 if (shouldLog) {
                     // DYNAMIC TABLE WRITE
-                    const tableName = historyTableService.getTableName(device.device_name, pointName)
+                    let tableName = meta.tableName
 
-                    // We can't use prepared statement variable for table name easily in postgres.js `${sql(tableName)}` might work if helper used correctly,
-                    // or usage of sql.unsafe for the whole query.
-                    // Safe approach with postgres.js helper: sql(tableName)
+                    // Lazy Provisioning: If table name missing, create it and update DB
+                    if (!tableName) {
+                        tableName = historyTableService.getTableName(device.device_name, meta.name)
+                        await historyTableService.ensureTableExists(tableName)
+                        await sql`UPDATE points SET report_table_name = ${tableName} WHERE id = ${pointId}`
+                        // Update local map to avoid re-provisioning in same loop (though unlikely to loop same point twice)
+                        meta.tableName = tableName
+                    }
 
                     await sql`
                         INSERT INTO ${sql(tableName)} (value, timestamp, quality_code)
