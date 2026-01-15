@@ -51,7 +51,7 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
           type="text"
           icon={<ClusterOutlined />}
           style={{ color: 'white' }}
-          onClick={() => onSelectSystem('HIERARCHY')}
+          onClick={() => onSelectSystem('GLOBAL_SETTINGS')}
         >
           Global Settings
         </Button>

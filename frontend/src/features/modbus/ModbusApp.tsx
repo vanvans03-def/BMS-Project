@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useMemo } from 'react'
-import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Statistic, Tabs } from 'antd'
+import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Statistic, Tabs, Tag } from 'antd'
 import {
   ReloadOutlined, PlusOutlined, DatabaseOutlined,
   HddOutlined, ThunderboltOutlined, ArrowLeftOutlined,
@@ -15,6 +15,7 @@ import AOS from 'aos'
 import { authFetch } from '../../utils/authFetch'
 import { DashboardLayout } from '../../components/layout/DashboardLayout'
 import { ModbusDeviceTable } from './ModbusDeviceTable'
+import { ModbusGatewayTable } from './ModbusGatewayTable'
 import { ModbusPointTable } from './ModbusPointTable'
 import { WriteValueModal } from '../../components/WriteValueModal'
 import { GeneralSettings, DatabaseSettings } from '../../components/SettingsTabs'
@@ -78,10 +79,12 @@ interface ModbusAppProps { onBack: () => void; initialDeviceId?: number | null; 
 
 export default function ModbusApp({ onBack, initialDeviceId, initialView }: ModbusAppProps) {
   const [currentView, setCurrentView] = useState<string>(initialDeviceId ? "loading" : (initialView || "dashboard"))
+  const [selectedGateway, setSelectedGateway] = useState<Device | null>(null)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
 
   // Modals & Forms
+  const [isGatewayModalOpen, setIsGatewayModalOpen] = useState(false)
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false)
   const [isPointModalOpen, setIsPointModalOpen] = useState(false)
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false)
@@ -97,10 +100,11 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
   const [writeValue, setWriteValue] = useState<string | number>("")
   const [isWriting, setIsWriting] = useState(false)
   const [pointValues, setPointValues] = useState<Map<number, PointValue>>(new Map())
+  const [formGateway] = Form.useForm()
   const [formDevice] = Form.useForm()
   const [formPoint] = Form.useForm()
 
-  useEffect(() => { AOS.refresh() }, [currentView, selectedDevice])
+  useEffect(() => { AOS.refresh() }, [currentView, selectedGateway, selectedDevice])
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -125,8 +129,17 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
       if (!selectedDevice) {
         const target = devices.find(d => d.id === initialDeviceId)
         if (target) {
+          // If it's a child device, we need to find its gateway too?
+          // Backend should ideally resolve `parent_id`
+          // For now, if we find specific device, just open 'detail'
           setSelectedDevice(target)
           setCurrentView('detail')
+
+          if (target.parent_id) {
+            const parent = devices.find(d => d.id === target.parent_id)
+            if (parent) setSelectedGateway(parent)
+          }
+
         } else if (!loadingDevices) {
           messageApi.error("Device not found")
           setCurrentView('dashboard')
@@ -177,10 +190,47 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
   }
 
   // Handlers
-  const handleAddDevice = async (values: any) => {
+  const handleAddGateway = async (values: any) => {
     try {
       const port = values.port || 502
       const ipAddress = `${values.ip}:${port}`
+
+      // Check for duplicate Gateway/device
+      const isDuplicate = devices?.some(d => d.ip_address === ipAddress)
+      if (isDuplicate) {
+        messageApi.error(`A device/gateway with IP ${ipAddress} already exists.`)
+        return
+      }
+
+      await authFetch('/devices', {
+        method: 'POST',
+        body: JSON.stringify([{
+          device_name: values.name,
+          device_instance_id: Math.floor(Math.random() * 100000),
+          ip_address: ipAddress,
+          network_number: 0,
+          protocol: 'MODBUS',
+          device_type: 'GATEWAY',
+          polling_interval: values.pollingInterval
+        }])
+      })
+      messageApi.success('Gateway added')
+      setIsGatewayModalOpen(false)
+      formGateway.resetFields()
+      refetchDevices()
+      // Ensure we stay on dashboard
+      setCurrentView('dashboard')
+      setSelectedGateway(null)
+      setSelectedDevice(null)
+    } catch { messageApi.error('Failed to add gateway') }
+  }
+
+  const handleAddDevice = async (values: any) => {
+    if (!selectedGateway) return
+    try {
+      // Inherit IP from Gateway
+      const ipAddress = selectedGateway.ip_address
+
       await authFetch('/devices', {
         method: 'POST',
         body: JSON.stringify([{
@@ -190,7 +240,9 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
           network_number: 0,
           protocol: 'MODBUS',
           unit_id: values.unitId,
-          polling_interval: values.pollingInterval
+          polling_interval: values.pollingInterval,
+          device_type: 'DEVICE',
+          parent_id: selectedGateway.id
         }])
       })
       messageApi.success('Device added')
@@ -309,7 +361,46 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
         <Row gutter={16} align="middle">
           <Col flex="auto">
             <Title level={3} style={{ margin: 0 }}>Modbus Manager</Title>
-            <Text type="secondary">Manage Modbus TCP/IP devices and registers</Text>
+            <Text type="secondary">Manage Gateways</Text>
+          </Col>
+          <Col>
+            <Space>
+              <Button icon={<ReloadOutlined />} onClick={() => refetchDevices()}>Refresh</Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsGatewayModalOpen(true)}>Add Gateway</Button>
+            </Space>
+          </Col>
+        </Row>
+      </div>
+
+      <div data-aos="fade-up" data-aos-delay="200">
+        <Card title="Modbus Networks">
+          <ModbusGatewayTable
+            gateways={devices?.filter(d => d.parent_id == null) || []}
+            loading={loadingDevices}
+            onView={(g) => { setSelectedGateway(g); setCurrentView('gateway') }}
+            onDelete={handleDeleteDevice}
+            onEdit={(g) => {
+              // Reuse edit polling logic or make new edit modal
+              setDeviceToEdit(g)
+              formEditPolling.setFieldsValue({ pollingInterval: g.polling_interval })
+              setIsEditPollingOpen(true)
+            }}
+          />
+        </Card>
+      </div>
+    </>
+  )
+
+  const renderGateway = () => (
+    <>
+      <div style={{ marginBottom: 24 }} data-aos="fade-down">
+        <Row gutter={16} align="middle">
+          <Col flex="auto">
+            <Space align="center">
+              <Title level={3} style={{ margin: 0 }}>{selectedGateway?.device_name}</Title>
+              <Tag color="geekblue">{selectedGateway?.ip_address}</Tag>
+            </Space>
+            <Text type="secondary" style={{ display: 'block' }}>Gateway Configuration</Text>
           </Col>
           <Col>
             <Space>
@@ -320,23 +411,19 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
         </Row>
       </div>
 
-      <div data-aos="fade-up">
-        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-          <Col xs={12} md={8}><Card><Statistic title="Total Devices" value={devices?.length || 0} prefix={<DatabaseOutlined />} /></Card></Col>
-          <Col xs={12} md={8}><Card><Statistic title="Online" value={devices?.filter(d => d.is_active).length || 0} valueStyle={{ color: '#3f8600' }} prefix={<ThunderboltOutlined />} /></Card></Col>
-          <Col xs={12} md={8}><Card><Statistic title="Total Points" value={0} prefix={<HddOutlined />} /></Card></Col>
-        </Row>
-      </div>
-
       <div data-aos="fade-up" data-aos-delay="200">
-        <Card title="Device List">
+        <Card title="Devices in Network">
           <ModbusDeviceTable
-            devices={devices || []}
+            devices={devices?.filter(d => d.parent_id === selectedGateway?.id && d.device_type === 'DEVICE') || []}
             loading={loadingDevices}
             defaultPollingInterval={globalPollingInterval}
             onView={(d) => { setSelectedDevice(d); setCurrentView('detail') }}
             onDelete={handleDeleteDevice}
-            onEditPolling={(d) => { setDeviceToEdit(d); formEditPolling.setFieldsValue({ pollingInterval: d.polling_interval }); setIsEditPollingOpen(true); }}
+            onEditPolling={(d) => {
+              setDeviceToEdit(d);
+              formEditPolling.setFieldsValue({ pollingInterval: d.polling_interval });
+              setIsEditPollingOpen(true);
+            }}
           />
         </Card>
       </div>
@@ -374,6 +461,28 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
     </>
   )
 
+  // Dynamic Menu (Updated Structure)
+  const menuItems = useMemo(() => {
+    if (selectedDevice && currentView === 'detail') {
+      return [
+        { key: "gateway", icon: <ArrowLeftOutlined />, label: "Back to Gateway" },
+      ]
+    }
+    if (selectedGateway && currentView === 'gateway') {
+      return [
+        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to Gateways" },
+        // { type: "divider" },
+        // { key: "points", icon: <ApiOutlined />, label: "Points" },
+      ]
+    }
+    return [
+      { key: "dashboard", icon: <DatabaseOutlined />, label: "Dashboard" },
+      { key: "history-graph", icon: <LineChartOutlined />, label: "History Graph" },
+      { key: "history-logs", icon: <FileTextOutlined />, label: "History Logs" },
+      { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" },
+    ]
+  }, [selectedDevice, selectedGateway, currentView])
+
   if (currentView === 'loading') {
     return (
       <DashboardLayout title="Modbus System" headerIcon={<HddOutlined />} themeColor="#faad14" onBack={onBack} currentView="loading" onMenuClick={() => { }}>
@@ -389,32 +498,21 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
     )
   }
 
-  // Dynamic Menu (Updated Structure)
-  const menuItems = useMemo(() => {
-    if (selectedDevice) {
-      return [
-        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to List" },
-        // { type: "divider" },
-        // { key: "points", icon: <ApiOutlined />, label: "Points" },
-      ]
-    }
-    return [
-      { key: "dashboard", icon: <DatabaseOutlined />, label: "Dashboard" },
-      { key: "history-graph", icon: <LineChartOutlined />, label: "History Graph" },
-      { key: "history-logs", icon: <FileTextOutlined />, label: "History Logs" },
-      { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" },
-    ]
-  }, [selectedDevice])
-
   return (
     <DashboardLayout
       title="Modbus Protocol"
       headerIcon={<HddOutlined />}
       themeColor="#faad14"
-      onBack={['dashboard', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined}
-      currentView={currentView === 'points' ? 'detail' : currentView}
+      onBack={
+        ['dashboard', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined
+      }
+      currentView={currentView === 'points' ? 'detail' : (currentView === 'gateway' ? 'gateway' : currentView)}
 
-      onMenuClick={(k) => { setCurrentView(k); if (k === 'dashboard') setSelectedDevice(null) }}
+      onMenuClick={(k) => {
+        setCurrentView(k);
+        if (k === 'dashboard') { setSelectedGateway(null); setSelectedDevice(null); }
+        if (k === 'gateway') { setSelectedDevice(null); }
+      }}
       onProfileClick={() => setIsProfileModalOpen(true)}
       menuItems={menuItems as any}
       headerActions={null}
@@ -423,6 +521,7 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
 
       {/* Level 1 Views */}
       {currentView === 'dashboard' && renderDashboard()}
+      {currentView === 'gateway' && renderGateway()}
 
       {currentView === 'history-graph' && (
         <Card title="Global History Graph" style={{ height: '100%' }}>
@@ -456,17 +555,32 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
         </Card>
       )}
 
-      {/* Add Device Modal */}
-      <Modal title="Add Modbus Device" open={isDeviceModalOpen} onCancel={() => setIsDeviceModalOpen(false)} footer={null}>
-        <Form form={formDevice} layout="vertical" onFinish={handleAddDevice}>
-          <Form.Item name="name" label="Device Name" rules={[{ required: true }]}><Input placeholder="e.g. PLC-01" /></Form.Item>
+      {/* Add Gateway Modal */}
+      <Modal title="Add Modbus Gateway" open={isGatewayModalOpen} onCancel={() => setIsGatewayModalOpen(false)} footer={null}>
+        <Form form={formGateway} layout="vertical" onFinish={handleAddGateway}>
+          <Form.Item name="name" label="Gateway Name" rules={[{ required: true }]}><Input placeholder="e.g. Building A Gateway" /></Form.Item>
           <Row gutter={16}>
-            <Col span={12}><Form.Item name="ip" label="IP Address" rules={[{ required: true }]}><Input placeholder="192.168.1.100" /></Form.Item></Col>
-            <Col span={6}><Form.Item name="port" label="Port" initialValue={502}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="unitId" label="Unit ID" initialValue={1}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={16}><Form.Item name="ip" label="IP Address" rules={[{ required: true }]}><Input placeholder="192.168.1.100" /></Form.Item></Col>
+            <Col span={8}><Form.Item name="port" label="Port" initialValue={502}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
-          <Form.Item name="pollingInterval" label="Polling Interval (ms)" tooltip="Leave blank to use system default">
+          <Form.Item name="pollingInterval" label="Default Polling (ms)" tooltip="Leave blank to use system default">
             <InputNumber style={{ width: '100%' }} placeholder={`Default: ${globalPollingInterval}ms`} min={500} step={500} />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" block>Add Gateway</Button>
+        </Form>
+      </Modal>
+
+      {/* Add Device Modal (Simplified for Child) */}
+      <Modal title="Add Device to Network" open={isDeviceModalOpen} onCancel={() => setIsDeviceModalOpen(false)} footer={null}>
+        <div style={{ marginBottom: 16 }}>
+          <Text type="secondary">Parent Gateway: </Text>
+          <Text strong>{selectedGateway?.device_name} ({selectedGateway?.ip_address})</Text>
+        </div>
+        <Form form={formDevice} layout="vertical" onFinish={handleAddDevice}>
+          <Form.Item name="name" label="Device Name" rules={[{ required: true }]}><Input placeholder="e.g. Power Meter 01" /></Form.Item>
+          <Form.Item name="unitId" label="Unit ID" initialValue={1} rules={[{ required: true }]}><InputNumber style={{ width: '100%' }} min={1} max={255} /></Form.Item>
+          <Form.Item name="pollingInterval" label="Polling Interval (ms)" tooltip="Override Gateway Default">
+            <InputNumber style={{ width: '100%' }} placeholder="Default" min={500} step={500} />
           </Form.Item>
           <Button type="primary" htmlType="submit" block>Add Device</Button>
         </Form>

@@ -264,23 +264,6 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     </>
   )
 
-  // [NEW] Loading State Render
-  if (currentView === 'loading') {
-    return (
-      <DashboardLayout title="BACnet System" headerIcon={<DatabaseOutlined />} themeColor="#1890ff" onBack={onBack} currentView="loading" onMenuClick={() => { }}>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-          {/* Using a Card or simple div with Spin */}
-          <Card style={{ width: 300, textAlign: 'center' }}>
-            <Space direction="vertical">
-              <Text>Loading Device...</Text>
-              <SyncOutlined spin style={{ fontSize: 24, color: '#1890ff' }} />
-            </Space>
-          </Card>
-        </div>
-      </DashboardLayout>
-    )
-  }
-
   // Dynamic Menu
   const menuItems = useMemo(() => {
     if (selectedDevice && currentView !== "loading") {
@@ -298,6 +281,23 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" }, // Renamed for clarity
     ]
   }, [selectedDevice, currentView])
+
+  // [NEW] Loading State Render
+  if (currentView === 'loading') {
+    return (
+      <DashboardLayout title="BACnet System" headerIcon={<DatabaseOutlined />} themeColor="#1890ff" onBack={onBack} currentView="loading" onMenuClick={() => { }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+          {/* Using a Card or simple div with Spin */}
+          <Card style={{ width: 300, textAlign: 'center' }}>
+            <Space direction="vertical">
+              <Text>Loading Device...</Text>
+              <SyncOutlined spin style={{ fontSize: 24, color: '#1890ff' }} />
+            </Space>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout

@@ -9,6 +9,8 @@ export interface Device {
   unit_id?: number
   is_active?: boolean
   polling_interval?: number | null
+  device_type?: 'GATEWAY' | 'DEVICE'
+  parent_id?: number | null
 }
 
 export interface Point {
