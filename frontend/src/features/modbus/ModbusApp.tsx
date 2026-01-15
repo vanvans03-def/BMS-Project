@@ -2,12 +2,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useMemo } from 'react'
-import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Statistic, Tabs, Tag } from 'antd'
+import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Tabs, Tag } from 'antd'
 import {
   ReloadOutlined, PlusOutlined, DatabaseOutlined,
   HddOutlined, ThunderboltOutlined, ArrowLeftOutlined,
   GlobalOutlined, ApiOutlined, SaveOutlined, FileTextOutlined,
-  WifiOutlined, LineChartOutlined
+  LineChartOutlined
 } from '@ant-design/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import AOS from 'aos'

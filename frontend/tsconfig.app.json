@@ -27,7 +27,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
     "paths": {
       "elysia": [
         "./node_modules/elysia"
