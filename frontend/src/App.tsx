@@ -34,6 +34,7 @@ function App() {
   // Update logic to accept view
   const handleSystemSelect = (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => {
     setCurrentSystem(system)
+    setTargetDeviceId(null)
     if (view) setTargetView(view)
     else setTargetView(undefined)
   }
