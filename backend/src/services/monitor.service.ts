@@ -11,7 +11,7 @@ export const monitorService = {
       if (!device) return { success: false, message: 'Device not found', values: [] }
 
       const points = await sql`
-        SELECT id, object_type, object_instance, point_name, register_type, data_type
+        SELECT id, object_type, object_instance, point_name, register_type, data_type, data_length
         FROM points 
         WHERE device_id = ${deviceId}
           AND is_monitor = true
@@ -78,9 +78,19 @@ export const monitorService = {
                 if (registerType === 'COIL') {
                   val = await modbusService.readCoilWithClient(client, address)
                 } else if (registerType === 'HOLDING_REGISTER') {
-                  val = await modbusService.readHoldingRegisterWithClient(client, address)
+                  if (point.data_type === 'STRING') {
+                    val = await modbusService.readStringWithClient(client, address, point.data_length || 10, false)
+                  } else {
+                    val = await modbusService.readHoldingRegisterWithClient(client, address)
+                  }
                 } else if (registerType === 'INPUT_REGISTER') {
-                  val = await modbusService.readInputRegisterWithClient(client, address)
+                  if (point.data_type === 'STRING') {
+                    val = await modbusService.readStringWithClient(client, address, point.data_length || 10, true)
+                  } else {
+                    val = await modbusService.readInputRegisterWithClient(client, address)
+                  }
+                } else if (registerType === 'DISCRETE_INPUT') {
+                  val = await modbusService.readDiscreteInputWithClient(client, address)
                 }
               }
 

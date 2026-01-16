@@ -23,6 +23,7 @@ export interface Point {
   register_type?: string
   data_type?: string
   data_format?: string
+  display_type?: string
 }
 
 export interface PointValue {

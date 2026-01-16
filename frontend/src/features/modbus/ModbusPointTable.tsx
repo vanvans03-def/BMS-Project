@@ -59,27 +59,63 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
       dataIndex: 'register_type',
       key: 'type',
       width: 140,
-      render: (type: string | undefined) => {
+      render: (_, record) => {
+        // [MODIFIED] Use display_type (Niagara Style) if available
+        if (record.display_type) {
+          let color = 'cyan'
+          let icon = <NumberOutlined />
+          const typeLower = record.display_type.toLowerCase()
+
+          if (typeLower.includes('boolean')) {
+            color = 'green'
+            icon = <ThunderboltOutlined />
+          } else if (typeLower.includes('string')) {
+            color = 'orange'
+            icon = <DatabaseOutlined />
+          }
+
+          return (
+            <Tag color={color} icon={icon}>
+              {record.display_type}
+            </Tag>
+          )
+        }
+
+        // Fallback logic: Derive from register_type if display_type is missing
+        let label = record.register_type?.replace('_', ' ') || 'UNKNOWN'
         let color = 'default'
         let icon = <NumberOutlined />
 
+        const type = record.register_type
+
+        // COIL -> Boolean(W)
         if (type === 'COIL') {
+          label = 'Boolean(W)'
           color = 'green'
           icon = <ThunderboltOutlined />
         }
-        if (type === 'HOLDING_REGISTER') {
+        // DISCRETE_INPUT -> Boolean(R)
+        else if (type === 'DISCRETE_INPUT') {
+          label = 'Boolean(R)'
+          color = 'green'
+          icon = <ThunderboltOutlined />
+        }
+        // HOLDING_REGISTER -> Numeric(W)
+        else if (type === 'HOLDING_REGISTER') {
+          label = 'Numeric(W)'
           color = 'blue'
           icon = <NumberOutlined />
         }
-        // [NEW] เพิ่มการแสดงผล Input Register
-        if (type === 'INPUT_REGISTER') {
+        // INPUT_REGISTER -> Numeric(R)
+        else if (type === 'INPUT_REGISTER') {
+          label = 'Numeric(R)'
           color = 'cyan'
           icon = <DatabaseOutlined />
         }
 
         return (
           <Tag color={color} icon={icon}>
-            {type?.replace('_', ' ') ?? 'UNKNOWN'}
+            {label}
           </Tag>
         )
       }

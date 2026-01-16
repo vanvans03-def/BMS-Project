@@ -55,27 +55,35 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
    * เพิ่ม Point ใหม่สำหรับ Modbus Device
    */
   .post('/add-point', async ({ body, request }) => {
-    const { deviceId, pointName, registerType, address, dataType, dataFormat } = body
+    const { deviceId, pointName, registerType, address, dataType, dataFormat, dataLength } = body
     const userName = getActorName(request)
 
     try {
-      // ตรวจสอบว่ามี Point ที่ Address นี้อยู่แล้วหรือไม่
-      const existing = await sql`
-        SELECT id FROM points 
-        WHERE device_id = ${deviceId} AND object_instance = ${address}
-      `
+      // ... existing check ...
+      const existing = await sql`SELECT id FROM points WHERE device_id = ${deviceId} AND object_instance = ${address}`
+      if (existing.length > 0) return { success: false, message: 'Point exists' }
 
-      if (existing.length > 0) {
-        return { success: false, message: 'Point at this address already exists' }
+      // ----------------------------------------------------
+      // [NEW] Niagara-style Display Type Logic
+      // ----------------------------------------------------
+      let displayType = 'Numeric(R)'
+
+      if (dataType === 'STRING') {
+        if (registerType === 'HOLDING_REGISTER') displayType = 'String(W)'
+        else displayType = 'String(R)'
       }
+      else if (registerType === 'COIL') displayType = 'Boolean(W)'
+      else if (registerType === 'DISCRETE_INPUT') displayType = 'Boolean(R)'
+      else if (registerType === 'HOLDING_REGISTER') displayType = 'Numeric(W)'
+      else if (registerType === 'INPUT_REGISTER') displayType = 'Numeric(R)'
 
       const [newPoint] = await sql`
         INSERT INTO points (
           device_id, object_type, object_instance, point_name, 
-          register_type, data_type, data_format, is_monitor -- [UPDATED] เพิ่ม data_format
+          register_type, data_type, data_format, is_monitor, display_type, data_length
         ) VALUES (
           ${deviceId}, 'MODBUS_POINT', ${address}, ${pointName},
-          ${registerType}, ${dataType || 'INT16'}, ${dataFormat || 'RAW'}, true
+          ${registerType}, ${dataType || 'INT16'}, ${dataFormat || 'RAW'}, true, ${displayType}, ${dataLength || 1}
         )
         RETURNING *
       `
@@ -105,7 +113,8 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
       registerType: t.String(),
       address: t.Number(),
       dataType: t.Optional(t.String()),
-      dataFormat: t.Optional(t.String())
+      dataFormat: t.Optional(t.String()),
+      dataLength: t.Optional(t.Number())
     })
   })
 

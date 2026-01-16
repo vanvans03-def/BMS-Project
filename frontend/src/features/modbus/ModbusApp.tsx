@@ -297,15 +297,28 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
   const handleAddPoint = async (values: any) => {
     if (!selectedDevice) return
     try {
+      // Map Point Type to Modbus Internals
+      let registerType = 'HOLDING_REGISTER'
+      let dataType = 'INT16'
+      const pt = values.pointType
+
+      if (pt === 'BOOLEAN_W') { registerType = 'COIL'; dataType = 'BOOL' }
+      else if (pt === 'BOOLEAN_R') { registerType = 'DISCRETE_INPUT'; dataType = 'BOOL' }
+      else if (pt === 'NUMERIC_W') { registerType = 'HOLDING_REGISTER'; dataType = values.dataType || 'INT16' }
+      else if (pt === 'NUMERIC_R') { registerType = 'INPUT_REGISTER'; dataType = values.dataType || 'INT16' }
+      else if (pt === 'STRING_W') { registerType = 'HOLDING_REGISTER'; dataType = 'STRING' }
+      else if (pt === 'STRING_R') { registerType = 'INPUT_REGISTER'; dataType = 'STRING' }
+
       const res = await authFetch('/modbus/add-point', {
         method: 'POST',
         body: JSON.stringify({
           deviceId: selectedDevice.id,
           pointName: values.name,
-          registerType: values.registerType,
+          registerType,
           address: values.address,
-          dataType: values.dataType,
-          dataFormat: values.dataFormat
+          dataType,
+          dataFormat: values.dataFormat,
+          dataLength: values.dataLength
         })
       })
       const data = await res.json()
@@ -713,19 +726,57 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
         <Form form={formPoint} layout="vertical" onFinish={handleAddPoint}>
           <Form.Item name="name" label="Point Name" rules={[{ required: true }]}><Input /></Form.Item>
 
-          <Form.Item name="registerType" label="Register Type" initialValue="HOLDING_REGISTER">
+          <Form.Item name="pointType" label="Point Type" initialValue="NUMERIC_W" help="Select the data type and permission">
             <Select>
-              <Select.Option value="COIL">Coil</Select.Option>
-              <Select.Option value="HOLDING_REGISTER">Holding Register</Select.Option>
-              <Select.Option value="INPUT_REGISTER">Input Register</Select.Option>
+              <Select.Option value="BOOLEAN_W">Boolean (W) - Coil</Select.Option>
+              <Select.Option value="BOOLEAN_R">Boolean (R) - Discrete Input</Select.Option>
+              <Select.Option value="NUMERIC_W">Numeric (W) - Holding Register</Select.Option>
+              <Select.Option value="NUMERIC_R">Numeric (R) - Input Register</Select.Option>
+              <Select.Option value="STRING_W">String (W) - Holding Register</Select.Option>
+              <Select.Option value="STRING_R">String (R) - Input Register</Select.Option>
             </Select>
           </Form.Item>
 
           <Row gutter={16}>
             <Col span={12}><Form.Item name="address" label="Address" rules={[{ required: true }]}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={12}><Form.Item name="dataType" label="Data Type" initialValue="INT16"><Select><Select.Option value="INT16">INT16</Select.Option><Select.Option value="UINT16">UINT16</Select.Option><Select.Option value="BOOL">Boolean</Select.Option></Select></Form.Item></Col>
+
+            {/* Dynamic Fields based on Point Type */}
+            <Form.Item noStyle shouldUpdate={(prev, curr) => prev.pointType !== curr.pointType}>
+              {({ getFieldValue }) => {
+                const type = getFieldValue('pointType')
+                const isNumeric = type === 'NUMERIC_W' || type === 'NUMERIC_R'
+                const isString = type === 'STRING_W' || type === 'STRING_R'
+
+                if (isNumeric) {
+                  return (
+                    <Col span={12}>
+                      <Form.Item name="dataType" label="Number Format" initialValue="INT16">
+                        <Select>
+                          <Select.Option value="INT16">INT16 (Short)</Select.Option>
+                          <Select.Option value="UINT16">UINT16 (UShort)</Select.Option>
+                          <Select.Option value="INT32">INT32 (Long)</Select.Option>
+                          <Select.Option value="UINT32">UINT32 (ULong)</Select.Option>
+                          <Select.Option value="FLOAT32">FLOAT32 (Float)</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                  )
+                }
+                if (isString) {
+                  return (
+                    <Col span={12}>
+                      <Form.Item name="dataLength" label="Length (Registers)" initialValue={10} help="1 Reg = 2 Chars">
+                        <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                      </Form.Item>
+                    </Col>
+                  )
+                }
+                return null
+              }}
+            </Form.Item>
           </Row>
-          <Form.Item name="dataFormat" label="Format" initialValue="RAW">
+
+          <Form.Item name="dataFormat" label="Display Format" initialValue="RAW">
             <Select>
               <Select.Option value="RAW">Raw</Select.Option>
               <Select.Option value="TEMP_C_100">Temp /100 (°C)</Select.Option>

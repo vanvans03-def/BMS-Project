@@ -37,8 +37,8 @@ export const connectClient = async (params: ConnectionParams, unitId: number) =>
       // Clean IP if needed
       if (targetIp.includes(':')) {
         const parts = targetIp.split(':')
-        targetIp = parts[0]
-        targetPort = parseInt(parts[1]) || targetPort
+        targetIp = parts[0]!
+        targetPort = parseInt(parts[1]!) || targetPort
       }
 
       await client.connectTCP(targetIp, { port: targetPort })
@@ -138,16 +138,24 @@ export const modbusService = {
         const data = await client.readCoils(point.object_instance, 1)
         result = data.data[0] ?? null
       }
+      else if (point.register_type === 'DISCRETE_INPUT') {
+        const data = await client.readDiscreteInputs(point.object_instance, 1)
+        result = data.data[0] ?? null
+      }
       else if (point.register_type === 'HOLDING_REGISTER') {
-        // Basic read
-        const data = await client.readHoldingRegisters(point.object_instance, 1) // Read 1 word (16bit)
-        // If FLOAT32 or INT32, we need 2 words. 
-        // Current DB `data_type` tells us.
-        // Let's assume standard 16-bit for now as per original code, 
-        // BUT implementation plan mentioned 32-bit floats.
+        // [NEW] String Handling
+        if (point.data_type === 'STRING') {
+          const length = point.data_length || 10 // Default 10 regs
 
-        // Checking point.data_type (mapped from DB)
-        if (point.data_type === 'FLOAT32' || point.data_type === 'INT32' || point.data_type === 'UINT32') {
+          // Reuse the string reading logic
+          const data = await client.readHoldingRegisters(point.object_instance, length)
+          const buffer = Buffer.alloc(data.data.length * 2)
+          for (let i = 0; i < data.data.length; i++) {
+            buffer.writeUInt16BE(data.data[i]!, i * 2)
+          }
+          result = buffer.toString('ascii').replace(/\0/g, '')
+        }
+        else if (point.data_type === 'FLOAT32' || point.data_type === 'INT32' || point.data_type === 'UINT32') {
           // Javascript/modbus-serial usually reads registers.
           // We might need to read 2 registers
           const data32 = await client.readHoldingRegisters(point.object_instance, 2)
@@ -159,12 +167,24 @@ export const modbusService = {
 
           // TODO: Real 32-bit parsing requires Buffer manipulation
         } else {
+          // Standard 16-bit
+          const data = await client.readHoldingRegisters(point.object_instance, 1) // Read 1 word
           result = data.data[0]
         }
       }
       else if (point.register_type === 'INPUT_REGISTER') {
-        const data = await client.readInputRegisters(point.object_instance, 1)
-        result = data.data[0] ?? null
+        if (point.data_type === 'STRING') {
+          const length = point.data_length || 10
+          const data = await client.readInputRegisters(point.object_instance, length)
+          const buffer = Buffer.alloc(data.data.length * 2)
+          for (let i = 0; i < data.data.length; i++) {
+            buffer.writeUInt16BE(data.data[i]!, i * 2)
+          }
+          result = buffer.toString('ascii').replace(/\0/g, '')
+        } else {
+          const data = await client.readInputRegisters(point.object_instance, 1)
+          result = data.data[0] ?? null
+        }
       }
 
       return result
@@ -282,6 +302,97 @@ export const modbusService = {
     } catch (error) {
       console.error(`❌ readInputRegisterWithClient Error (Addr: ${address}):`, error)
       throw error
+    }
+  },
+
+  async readDiscreteInputWithClient(client: ModbusRTU, address: number): Promise<boolean | null> {
+    try {
+      const data = await client.readDiscreteInputs(address, 1)
+      return data.data[0] ?? null
+    } catch (error) {
+      console.error(`❌ readDiscreteInputWithClient Error (Addr: ${address}):`, error)
+      throw error
+    }
+  },
+
+  // [NEW] String Support
+  async readStringWithClient(client: ModbusRTU, address: number, length: number, isInput: boolean = false): Promise<string | null> {
+    try {
+      // Read N registers (each register = 2 bytes / 2 chars usually)
+      const data = isInput
+        ? await client.readInputRegisters(address, length)
+        : await client.readHoldingRegisters(address, length)
+
+      if (!data.data || data.data.length === 0) return null
+
+      // Convert registers to buffer/string
+      // Modbus-serial returns array of numbers (uint16).
+      // We need to convert to Buffer then String.
+      // 1 Register = 2 Bytes.
+      const buffer = Buffer.alloc(data.data.length * 2)
+      for (let i = 0; i < data.data.length; i++) {
+        buffer.writeUInt16BE(data.data[i]!, i * 2)
+      }
+      // Trim null bytes
+      return buffer.toString('ascii').replace(/\0/g, '')
+    } catch (error) {
+      console.error(`❌ readStringWithClient Error (Addr: ${address}):`, error)
+      throw error
+    }
+  },
+
+  async writeString(pointId: number, value: string, userName: string = 'System') {
+    const [point] = await sql`SELECT * FROM points WHERE id = ${pointId}`
+    if (!point) throw new Error('Point not found')
+
+    const { params, unitId, deviceName } = await getConnectionInfo(point.device_id)
+    const client = await connectClient(params, unitId)
+
+    try {
+      console.log(`📝 [Modbus] Writing String: ${point.object_instance} -> "${value}"`)
+
+      // Convert String to Registers
+      const buffer = Buffer.alloc(value.length)
+      buffer.write(value, 'ascii')
+
+      // Pad to nearest even byte count if odd (though buffers usually nice)
+      // We need strict register alignment. 
+      // How many registers? 
+      // If point has fixed data_length, we should respect it or truncate/pad.
+      // For now, just write what we have.
+
+      const numRegisters = Math.ceil(buffer.length / 2)
+      const registers = []
+      // We don't need this loop if we build finalBuffer directly
+      // for (let i = 0; i < numRegisters; i++) { ... }
+
+      // Re-do robust buffer padding
+      const targetLength = (point.data_length || numRegisters) * 2 // in bytes
+      const finalBuffer = Buffer.alloc(targetLength)
+      finalBuffer.write(value, 'ascii') // writes as much as fits
+
+      const dataToWrite = []
+      for (let i = 0; i < targetLength / 2; i++) {
+        dataToWrite.push(finalBuffer.readUInt16BE(i * 2))
+      }
+
+      await client.writeRegisters(point.object_instance, dataToWrite)
+
+      const { auditLogService } = await import('./audit-log.service')
+      await auditLogService.recordLog({
+        user_name: userName,
+        action_type: 'WRITE',
+        target_name: `[${deviceName}] ${point.point_name}`,
+        details: `Set to "${value}"`,
+        protocol: 'MODBUS'
+      })
+
+      return true
+    } catch (error) {
+      console.error(`❌ Write String Error:`, error)
+      throw error
+    } finally {
+      client.close()
     }
   }
 }
