@@ -1,10 +1,27 @@
 // DTO สำหรับรับค่าจาก Frontend เพื่อสร้าง Device ใหม่
 export interface CreateModbusDeviceDto {
   device_name: string
-  ip_address: string
-  port?: number
+  ip_address?: string // Required if TCP and no parent
+  port?: number // Default 502
   unit_id: number
   protocol: 'MODBUS'
+  device_type?: 'GATEWAY' | 'DEVICE'
+  parent_id?: number
+
+  // Connection Configuration
+  connection_type?: 'TCP' | 'SERIAL'
+  tcp_response_timeout?: number
+
+  // Serial Parameters (for Gateway)
+  serial_port_name?: string
+  serial_baud_rate?: number
+  serial_data_bits?: number
+  serial_stop_bits?: number
+  serial_parity?: 'none' | 'even' | 'odd'
+
+  // Tuning Policy (Data Formatting)
+  byte_order_float?: 'Order3210' | 'Order1032' | 'Order2301' | 'Order0123'
+  byte_order_long?: 'Order3210' | 'Order1032' | 'Order2301' | 'Order0123'
 }
 
 // DTO สำหรับรับค่าจาก Frontend เพื่อสร้าง Point ใหม่

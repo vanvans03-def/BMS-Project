@@ -31,14 +31,26 @@ export const devicesService = {
         const protocol = dev.protocol || 'BACNET'
         const unitId = dev.unit_id || null
 
-        // @ts-ignore
         const pollingInterval = dev.polling_interval || null
+
+        // [NEW] Modbus & Hierarchy Fields
+        const deviceType = dev.device_type || 'DEVICE'
+        const parentId = dev.parent_id || null
+        const connectionType = dev.connection_type || 'TCP'
+        const tcpTimeout = dev.tcp_response_timeout || 1000
+
+        const serialPortName = dev.serial_port_name || null
+        const serialBaudRate = dev.serial_baud_rate || 9600
+        const serialDataBits = dev.serial_data_bits || 8
+        const serialStopBits = dev.serial_stop_bits || 1
+        const serialParity = dev.serial_parity || 'none'
+
+        const byteOrderFloat = dev.byte_order_float || 'Order3210'
+        const byteOrderLong = dev.byte_order_long || 'Order3210'
 
         // [NEW] App 4 Fields
         const locationId = dev.location_id || null
         const isHistoryEnabled = dev.is_history_enabled || false
-
-
 
         const existing = await sql`SELECT id FROM devices WHERE device_instance_id = ${instanceId}`
 
@@ -47,11 +59,19 @@ export const devicesService = {
             INSERT INTO devices (
                 device_name, device_instance_id, ip_address, network_number,
                 is_active, protocol, unit_id, polling_interval,
-                location_id, is_history_enabled
+                location_id, is_history_enabled,
+                
+                device_type, parent_id, connection_type, tcp_response_timeout,
+                serial_port_name, serial_baud_rate, serial_data_bits, serial_stop_bits, serial_parity,
+                byte_order_float, byte_order_long
             ) VALUES (
                 ${name}, ${instanceId}, ${ip}, ${network},
                 true, ${protocol}, ${unitId}, ${pollingInterval},
-                ${locationId}, ${isHistoryEnabled}
+                ${locationId}, ${isHistoryEnabled},
+
+                ${deviceType}, ${parentId}, ${connectionType}, ${tcpTimeout},
+                ${serialPortName}, ${serialBaudRate}, ${serialDataBits}, ${serialStopBits}, ${serialParity},
+                ${byteOrderFloat}, ${byteOrderLong}
             )
             RETURNING *
           `

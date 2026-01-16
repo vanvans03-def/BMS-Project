@@ -28,8 +28,12 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
     background: 'white' // Ensure cards stay white
   }
 
-  const handleSettingsClick = (e: React.MouseEvent) => {
+  // State to track which settings to open
+  const [settingsProtocol, setSettingsProtocol] = useState<'BACNET' | 'MODBUS' | null>(null)
+
+  const handleSettingsClick = (protocol: 'BACNET' | 'MODBUS') => (e: React.MouseEvent) => {
     e.stopPropagation()
+    setSettingsProtocol(protocol)
     setIsSettingsOpen(true)
   }
 
@@ -77,6 +81,7 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
         </div>
 
         <Row gutter={[24, 24]} justify="center">
+
           {/* 1. BACnet Card */}
           <Col xs={24} sm={12} data-aos="fade-up" data-aos-delay="100">
             <Card
@@ -90,7 +95,7 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
                 type="text"
                 icon={<SettingOutlined style={{ fontSize: 18 }} />}
                 style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, color: '#8c8c8c' }}
-                onClick={handleSettingsClick}
+                onClick={handleSettingsClick('BACNET')}
               />
               <div style={{ textAlign: 'center' }}>
                 <div style={{
@@ -129,7 +134,7 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
                 type="text"
                 icon={<SettingOutlined style={{ fontSize: 18 }} />}
                 style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, color: '#8c8c8c' }}
-                onClick={handleSettingsClick}
+                onClick={handleSettingsClick('MODBUS')}
               />
               <div style={{ textAlign: 'center' }}>
                 <div style={{
@@ -154,20 +159,20 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
               </div>
             </Card>
           </Col>
-        </Row>
+        </Row >
 
         {/* Network Settings Modal */}
-        <Modal
-          title="Network Configuration"
+        < Modal
+          title={`${settingsProtocol === 'MODBUS' ? 'Modbus' : 'Network'} Configuration`}
           open={isSettingsOpen}
           onCancel={() => setIsSettingsOpen(false)}
           footer={null}
           width={800}
           destroyOnClose
         >
-          <NetworkSettings />
-        </Modal>
-      </div>
+          <NetworkSettings filterProtocol={settingsProtocol || 'BACNET'} />
+        </Modal >
+      </div >
 
       <style>{`
         .hover-lift-strong:hover {
@@ -177,6 +182,6 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
           box-shadow: 0 12px 24px rgba(24, 144, 255, 0.15);
         }
       `}</style>
-    </DashboardLayout>
+    </DashboardLayout >
   )
 }

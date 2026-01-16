@@ -13,7 +13,7 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
   .post('/write-coil', async ({ body, request }) => {
     const { pointId, value } = body
     const userName = getActorName(request)
-    
+
     try {
       await modbusService.writeCoil(pointId, value, userName)
       return { success: true, message: 'Coil written successfully' }
@@ -35,7 +35,7 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
   .post('/write-register', async ({ body, request }) => {
     const { pointId, value } = body
     const userName = getActorName(request)
-    
+
     try {
       await modbusService.writeRegister(pointId, value, userName)
       return { success: true, message: 'Register written successfully' }
@@ -57,19 +57,19 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
   .post('/add-point', async ({ body, request }) => {
     const { deviceId, pointName, registerType, address, dataType, dataFormat } = body
     const userName = getActorName(request)
-    
+
     try {
       // ตรวจสอบว่ามี Point ที่ Address นี้อยู่แล้วหรือไม่
       const existing = await sql`
         SELECT id FROM points 
         WHERE device_id = ${deviceId} AND object_instance = ${address}
       `
-      
+
       if (existing.length > 0) {
         return { success: false, message: 'Point at this address already exists' }
       }
 
-        const [newPoint] = await sql`
+      const [newPoint] = await sql`
         INSERT INTO points (
           device_id, object_type, object_instance, point_name, 
           register_type, data_type, data_format, is_monitor -- [UPDATED] เพิ่ม data_format
@@ -93,9 +93,9 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
       return { success: true, point: newPoint }
     } catch (error) {
       console.error('Add point error:', error)
-      return { 
-        success: false, 
-        message: error instanceof Error ? error.message : 'Failed to add point' 
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to add point'
       }
     }
   }, {
@@ -116,12 +116,12 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
   .delete('/point/:id', async ({ params, request }) => {
     const pointId = Number(params.id)
     const userName = getActorName(request)
-    
+
     try {
       const [point] = await sql`
         SELECT point_name FROM points WHERE id = ${pointId}
       `
-      
+
       if (!point) {
         return { success: false, message: 'Point not found' }
       }
@@ -150,18 +150,16 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
    */
   .post('/test-connection', async ({ body }) => {
     const { ip, port, unitId } = body
-    
+
     try {
       const isConnected = await modbusService.testConnection(ip, port || 502, unitId)
-      return { 
-        success: true, 
-        connected: isConnected,
-        message: isConnected ? 'Connection successful' : 'Connection failed'
+      return {
+        success: isConnected,
+        message: isConnected ? 'Ping successful (Device Responded)' : 'Ping failed (No Response or Connection Refused)'
       }
     } catch (error) {
-      return { 
-        success: false, 
-        connected: false,
+      return {
+        success: false,
         message: error instanceof Error ? error.message : 'Test failed'
       }
     }

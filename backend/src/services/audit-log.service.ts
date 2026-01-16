@@ -36,20 +36,16 @@ export const auditLogService = {
       const target = entry.target || entry.target_name || ''
       const details = entry.details
 
-      // Resolve user_name to id if userId is missing
-      if (!uid && entry.user_name) {
-        const users = await sql`SELECT id FROM users WHERE username = ${entry.user_name}`
-        if (users.length > 0) uid = users[0]!.id
+      // Resolve userId to user_name if missing
+      let username = entry.user_name
+      if (!username && uid) {
+        const users = await sql`SELECT username FROM users WHERE id = ${uid}`
+        if (users.length > 0) username = users[0]!.username
       }
 
-      // If still no uid, maybe system action? or default to null?
-      // Table expects integer, maybe nullable? Migration 13 says user_id INTEGER REFERENCES users(id). 
-      // If we can't find user, we might fail constraint. 
-      // Let's check if nullable. Usually yes unless NOT NULL specified. Migration 13 didn't say NOT NULL for user_id.
-
       await sql`
-        INSERT INTO audit_logs (user_id, action, target, protocol, details, ip_address)
-        VALUES (${uid || null}, ${action}, ${target || null}, ${entry.protocol || null}, ${details || null}, ${entry.ipAddress || null})
+        INSERT INTO audit_logs (user_name, action_type, target_name, protocol, details, timestamp)
+        VALUES (${username || 'SYSTEM'}, ${action}, ${target || null}, ${entry.protocol || null}, ${details || null}, NOW())
       `
     } catch (error) {
       console.error('❌ Failed to create audit log:', error)
@@ -80,22 +76,21 @@ export const auditLogService = {
       const result = await sql`
         SELECT 
           l.id,
-          l.created_at as timestamp,
-          u.username as user_name,
-          l.action as action_type,
-          l.target as target_name,
+          l.timestamp,
+          l.user_name,
+          l.action_type,
+          l.target_name,
           l.details,
           l.protocol
         FROM audit_logs l
-        LEFT JOIN users u ON l.user_id = u.id
         WHERE 1 = 1
-        ${search ? sql`AND (l.target ILIKE ${`%${search}%`} OR l.details::text ILIKE ${`%${search}%`})` : sql``}
-        ${actionType ? sql`AND l.action = ${actionType}` : sql``}
-        ${user ? sql`AND u.username = ${user}` : sql``}
+        ${search ? sql`AND (l.target_name ILIKE ${`%${search}%`} OR l.details::text ILIKE ${`%${search}%`})` : sql``}
+        ${actionType ? sql`AND l.action_type = ${actionType}` : sql``}
+        ${user ? sql`AND l.user_name = ${user}` : sql``}
         ${protocols ? sql`AND l.protocol IN ${sql(protocols.split(','))}` : sql``}
-        ${startDate ? sql`AND l.created_at >= ${startDate}` : sql``}
-        ${endDate ? sql`AND l.created_at <= ${endDate}` : sql``}
-        ORDER BY l.created_at DESC
+        ${startDate ? sql`AND l.timestamp >= ${startDate}` : sql``}
+        ${endDate ? sql`AND l.timestamp <= ${endDate}` : sql``}
+        ORDER BY l.timestamp DESC
         LIMIT ${limit} OFFSET ${offset}
       `
 

@@ -37,6 +37,19 @@ export const ModbusGatewayTable = ({ gateways, loading, onView, onDelete, onEdit
             title: 'Network Configuration',
             key: 'network',
             render: (_, record) => {
+                if (record.connection_type === 'SERIAL') {
+                    return (
+                        <Space direction="vertical" size={0}>
+                            <Tag icon={<DatabaseOutlined />} color="purple">
+                                {record.serial_port_name || 'COM1'}
+                            </Tag>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                {record.serial_baud_rate} / {record.serial_data_bits} / {record.serial_parity?.[0]?.toUpperCase()} / {record.serial_stop_bits}
+                            </Text>
+                        </Space>
+                    )
+                }
+
                 let displayIp = record.ip_address
                 let displayPort = 502
 

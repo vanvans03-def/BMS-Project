@@ -89,4 +89,17 @@ export interface CreateDevicePayload {
 
   location_id?: number
   is_history_enabled?: boolean
+
+  // [NEW] Modbus & Hierarchy Fields
+  device_type?: 'GATEWAY' | 'DEVICE'
+  parent_id?: number | null
+  connection_type?: 'TCP' | 'SERIAL'
+  tcp_response_timeout?: number
+  serial_port_name?: string
+  serial_baud_rate?: number
+  serial_data_bits?: number
+  serial_stop_bits?: number
+  serial_parity?: 'none' | 'even' | 'odd'
+  byte_order_float?: string
+  byte_order_long?: string
 }

@@ -121,7 +121,14 @@ export const GeneralSettings = () => {
 // ================================
 // 2. NETWORK SETTINGS
 // ================================
-export const NetworkSettings = () => {
+// ================================
+// 2. NETWORK SETTINGS
+// ================================
+interface NetworkSettingsProps {
+    filterProtocol?: 'BACNET' | 'MODBUS'
+}
+
+export const NetworkSettings = ({ filterProtocol = 'BACNET' }: NetworkSettingsProps) => {
     const [form] = Form.useForm()
     const [loading, setLoading] = useState(false)
     const [messageApi, contextHolder] = message.useMessage()
@@ -166,52 +173,67 @@ export const NetworkSettings = () => {
     return (
         <Card>
             {contextHolder}
-            <div data-aos="fade-up">
-                <Alert
-                    message="Restart Required"
-                    description="Changing Device ID or Port requires a backend restart."
-                    type="warning"
-                    showIcon
-                    style={{ marginBottom: 24 }}
-                />
-            </div>
+
+            {filterProtocol === 'BACNET' && (
+                <div data-aos="fade-up">
+                    <Alert
+                        message="Restart Required"
+                        description="Changing Device ID or Port requires a backend restart."
+                        type="warning"
+                        showIcon
+                        style={{ marginBottom: 24 }}
+                    />
+                </div>
+            )}
 
             <Form form={form} layout="vertical" onFinish={onFinish}>
                 <Row gutter={[16, 24]}>
-                    <Col xs={24} lg={12}>
-                        <div data-aos="fade-right" data-aos-delay="100">
-                            <Title level={5}><ApiOutlined /> Local Device Identity</Title>
-                            <Card size="small" style={{ background: '#fafafa' }}>
-                                <Form.Item
-                                    name="bacnet_device_id"
-                                    label="Device Instance ID"
-                                    extra="Must be unique in the network"
-                                    rules={[{ required: true, message: 'Device ID is required' }]}
-                                >
-                                    <InputNumber style={{ width: '100%' }} min={0} max={4194303} />
-                                </Form.Item>
-                            </Card>
-                        </div>
-                    </Col>
+                    {filterProtocol === 'BACNET' && (
+                        <Col xs={24} lg={12}>
+                            <div data-aos="fade-right" data-aos-delay="100">
+                                <Title level={5}><ApiOutlined /> Local Device Identity</Title>
+                                <Card size="small" style={{ background: '#fafafa' }}>
+                                    <Form.Item
+                                        name="bacnet_device_id"
+                                        label="Device Instance ID"
+                                        extra="Must be unique in the network"
+                                        rules={[{ required: true, message: 'Device ID is required' }]}
+                                    >
+                                        <InputNumber style={{ width: '100%' }} min={0} max={4194303} />
+                                    </Form.Item>
+                                </Card>
+                            </div>
+                        </Col>
+                    )}
 
-                    <Col xs={24} lg={12}>
-                        <div data-aos="fade-left" data-aos-delay="100">
+                    <Col xs={24} lg={filterProtocol === 'BACNET' ? 12 : 24}>
+                        <div data-aos={filterProtocol === 'BACNET' ? "fade-left" : "fade-up"} data-aos-delay="100">
                             <Title level={5}><GlobalOutlined /> Communication</Title>
-                            <Row gutter={16}>
-                                <Col xs={24} sm={12}>
-                                    <Form.Item name="bacnet_port" label="UDP Port">
-                                        <InputNumber style={{ width: '100%' }} placeholder="47808" />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} sm={12}>
-                                    <Form.Item name="discovery_timeout" label="Timeout (ms)">
-                                        <InputNumber style={{ width: '100%' }} step={1000} />
-                                    </Form.Item>
-                                </Col>
-                            </Row>
-                            <Form.Item name="polling_interval" label="Polling Interval (ms)" extra="Auto-refresh rate">
-                                <InputNumber style={{ width: '100%' }} step={1000} min={1000} />
-                            </Form.Item>
+                            {filterProtocol === 'BACNET' && (
+                                <Row gutter={16}>
+                                    <Col xs={24} sm={12}>
+                                        <Form.Item name="bacnet_port" label="UDP Port">
+                                            <InputNumber style={{ width: '100%' }} placeholder="47808" />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col xs={24} sm={12}>
+                                        <Form.Item name="discovery_timeout" label="Timeout (ms)">
+                                            <InputNumber style={{ width: '100%' }} step={1000} />
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+                            )}
+                            {filterProtocol === 'BACNET' && (
+                                <Form.Item name="polling_interval" label="Global Polling Interval (ms)" extra="Auto-refresh rate for all systems">
+                                    <InputNumber style={{ width: '100%' }} step={1000} min={1000} />
+                                </Form.Item>
+                            )}
+
+                            {filterProtocol === 'MODBUS' && (
+                                <Form.Item name="modbus_timeout" label="Global TCP Timeout (ms)" extra="Default timeout for TCP connections">
+                                    <InputNumber style={{ width: '100%' }} step={1000} min={1000} />
+                                </Form.Item>
+                            )}
                         </div>
                     </Col>
                 </Row>
@@ -226,7 +248,7 @@ export const NetworkSettings = () => {
                         loading={loading}
                         block={window.innerWidth < 576}
                     >
-                        Save Network Configuration
+                        Save Configuration
                     </Button>
                 </div>
             </Form>

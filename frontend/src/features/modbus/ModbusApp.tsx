@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useMemo } from 'react'
-import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Tabs, Tag } from 'antd'
+import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Tabs, Tag, Radio } from 'antd'
 import {
   ReloadOutlined, PlusOutlined, DatabaseOutlined,
   HddOutlined, ThunderboltOutlined, ArrowLeftOutlined,
@@ -192,27 +192,42 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
   // Handlers
   const handleAddGateway = async (values: any) => {
     try {
-      const port = values.port || 502
-      const ipAddress = `${values.ip}:${port}`
+      const connectionType = values.connectionType || 'TCP'
 
-      // Check for duplicate Gateway/device
-      const isDuplicate = devices?.some(d => d.ip_address === ipAddress)
-      if (isDuplicate) {
-        messageApi.error(`A device/gateway with IP ${ipAddress} already exists.`)
-        return
+      const payload: any = {
+        device_name: values.name,
+        device_instance_id: Math.floor(Math.random() * 100000),
+        network_number: 0,
+        protocol: 'MODBUS',
+        device_type: 'GATEWAY',
+        polling_interval: values.pollingInterval,
+        connection_type: connectionType
+      }
+
+      if (connectionType === 'TCP') {
+        const port = values.port || 502
+        payload.ip_address = `${values.ip}:${port}`
+        payload.tcp_response_timeout = values.timeout
+      } else {
+        payload.serial_port_name = values.serialPort
+        payload.serial_baud_rate = values.baudRate
+        payload.serial_data_bits = values.dataBits
+        payload.serial_stop_bits = values.stopBits
+        payload.serial_parity = values.parity
+      }
+
+      // Check for duplicate Gateway/device (Simple check)
+      if (connectionType === 'TCP') {
+        const isDuplicate = devices?.some(d => d.ip_address === payload.ip_address)
+        if (isDuplicate) {
+          messageApi.error(`A device/gateway with IP ${payload.ip_address} already exists.`)
+          return
+        }
       }
 
       await authFetch('/devices', {
         method: 'POST',
-        body: JSON.stringify([{
-          device_name: values.name,
-          device_instance_id: Math.floor(Math.random() * 100000),
-          ip_address: ipAddress,
-          network_number: 0,
-          protocol: 'MODBUS',
-          device_type: 'GATEWAY',
-          polling_interval: values.pollingInterval
-        }])
+        body: JSON.stringify([payload])
       })
       messageApi.success('Gateway added')
       setIsGatewayModalOpen(false)
@@ -242,7 +257,11 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
           unit_id: values.unitId,
           polling_interval: values.pollingInterval,
           device_type: 'DEVICE',
-          parent_id: selectedGateway.id
+          parent_id: selectedGateway.id,
+          // Tuning
+          tcp_response_timeout: values.timeout,
+          byte_order_float: values.byteOrderFloat,
+          byte_order_long: values.byteOrderLong
         }])
       })
       messageApi.success('Device added')
@@ -557,12 +576,57 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
 
       {/* Add Gateway Modal */}
       <Modal title="Add Modbus Gateway" open={isGatewayModalOpen} onCancel={() => setIsGatewayModalOpen(false)} footer={null}>
-        <Form form={formGateway} layout="vertical" onFinish={handleAddGateway}>
+        <Form form={formGateway} layout="vertical" onFinish={handleAddGateway} initialValues={{ connectionType: 'TCP', port: 502, timeout: 2000, baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' }}>
           <Form.Item name="name" label="Gateway Name" rules={[{ required: true }]}><Input placeholder="e.g. Building A Gateway" /></Form.Item>
-          <Row gutter={16}>
-            <Col span={16}><Form.Item name="ip" label="IP Address" rules={[{ required: true }]}><Input placeholder="192.168.1.100" /></Form.Item></Col>
-            <Col span={8}><Form.Item name="port" label="Port" initialValue={502}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
-          </Row>
+
+          <Form.Item name="connectionType" label="Connection Type">
+            <Radio.Group buttonStyle="solid">
+              <Radio.Button value="TCP">TCP (Ethernet)</Radio.Button>
+              <Radio.Button value="SERIAL">Serial (RS-485)</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
+
+          <Form.Item noStyle shouldUpdate={(prev, current) => prev.connectionType !== current.connectionType}>
+            {({ getFieldValue }) => {
+              const type = getFieldValue('connectionType')
+              return type === 'SERIAL' ? (
+                <>
+                  <Row gutter={16}>
+                    <Col span={12}><Form.Item name="serialPort" label="Port Name" rules={[{ required: true }]}><Input placeholder="COM1 or /dev/ttyUSB0" /></Form.Item></Col>
+                    <Col span={12}><Form.Item name="baudRate" label="Baud Rate"><Select options={[9600, 19200, 38400, 57600, 115200].map(v => ({ label: v, value: v }))} /></Form.Item></Col>
+                  </Row>
+                  <Row gutter={16}>
+                    <Col span={8}><Form.Item name="dataBits" label="Data Bits"><Select options={[7, 8].map(v => ({ label: v, value: v }))} /></Form.Item></Col>
+                    <Col span={8}><Form.Item name="stopBits" label="Stop Bits"><Select options={[1, 2].map(v => ({ label: v, value: v }))} /></Form.Item></Col>
+                    <Col span={8}><Form.Item name="parity" label="Parity"><Select options={['none', 'even', 'odd'].map(v => ({ label: v, value: v }))} /></Form.Item></Col>
+                  </Row>
+                </>
+              ) : (
+                <>
+                  <Row gutter={8} align="bottom">
+                    <Col span={14}><Form.Item name="ip" label="IP Address" rules={[{ required: true }]}><Input placeholder="192.168.1.100" /></Form.Item></Col>
+                    <Col span={6}><Form.Item name="port" label="Port"><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
+                    <Col span={4}>
+                      <Form.Item>
+                        <Button onClick={async () => {
+                          const ip = formGateway.getFieldValue('ip')
+                          const port = formGateway.getFieldValue('port')
+                          if (!ip) return messageApi.error('Enter IP first')
+                          const res = await authFetch('/modbus/test-connection', {
+                            method: 'POST', body: JSON.stringify({ ip, port, unitId: 1 })
+                          })
+                          const d = await res.json()
+                          d.success ? messageApi.success(d.message) : messageApi.error(d.message)
+                        }}>Ping</Button>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Form.Item name="timeout" label="Timeout (ms)"><InputNumber min={500} step={500} style={{ width: '100%' }} /></Form.Item>
+                </>
+              )
+            }}
+          </Form.Item>
+
           <Form.Item name="pollingInterval" label="Default Polling (ms)" tooltip="Leave blank to use system default">
             <InputNumber style={{ width: '100%' }} placeholder={`Default: ${globalPollingInterval}ms`} min={500} step={500} />
           </Form.Item>
@@ -579,6 +643,33 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
         <Form form={formDevice} layout="vertical" onFinish={handleAddDevice}>
           <Form.Item name="name" label="Device Name" rules={[{ required: true }]}><Input placeholder="e.g. Power Meter 01" /></Form.Item>
           <Form.Item name="unitId" label="Unit ID" initialValue={1} rules={[{ required: true }]}><InputNumber style={{ width: '100%' }} min={1} max={255} /></Form.Item>
+
+          <div style={{ marginBottom: 16, border: '1px dashed #d9d9d9', padding: 12, borderRadius: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text strong style={{ fontSize: 12 }}>Device Tuning (Advanced)</Text>
+              <Button size="small" type="dashed" onClick={() => {
+                const current = formDevice.getFieldValue('byteOrderFloat')
+                const next = current === 'Order1032' ? 'Order3210' : 'Order1032' // Simple toggle
+                formDevice.setFieldsValue({ byteOrderFloat: next, byteOrderLong: next })
+              }}>Swap Byte Order</Button>
+            </div>
+            <Row gutter={8}>
+              <Col span={12}>
+                <Form.Item name="byteOrderFloat" label="Float Order" initialValue="Order3210">
+                  <Select options={[{ value: 'Order3210', label: 'Big Endian (ABCD)' }, { value: 'Order1032', label: 'Little Endian (CDAB) - Swap Words' }]} />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="byteOrderLong" label="Long Order" initialValue="Order3210">
+                  <Select options={[{ value: 'Order3210', label: 'Big Endian' }, { value: 'Order1032', label: 'Little Endian' }]} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item name="timeout" label="Response Timeout (ms)">
+              <InputNumber style={{ width: '100%' }} placeholder="Inherit from Gateway" step={500} />
+            </Form.Item>
+          </div>
+
           <Form.Item name="pollingInterval" label="Polling Interval (ms)" tooltip="Override Gateway Default">
             <InputNumber style={{ width: '100%' }} placeholder="Default" min={500} step={500} />
           </Form.Item>

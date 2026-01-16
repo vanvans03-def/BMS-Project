@@ -24,6 +24,19 @@ export const devicesRoutes = new Elysia({ prefix: '/devices' })
       unit_id: t.Optional(t.Number()),
       polling_interval: t.Optional(t.Nullable(t.Number())),
 
+      // [NEW] Modbus & Hierarchy Fields
+      device_type: t.Optional(t.String()),
+      parent_id: t.Optional(t.Nullable(t.Number())),
+      connection_type: t.Optional(t.String()),
+      tcp_response_timeout: t.Optional(t.Number()),
+      serial_port_name: t.Optional(t.String()),
+      serial_baud_rate: t.Optional(t.Number()),
+      serial_data_bits: t.Optional(t.Number()),
+      serial_stop_bits: t.Optional(t.Number()),
+      serial_parity: t.Optional(t.String()),
+      byte_order_float: t.Optional(t.String()),
+      byte_order_long: t.Optional(t.String()),
+
       // [NEW] App 4 Fields
       location_id: t.Optional(t.Nullable(t.Number())),
       is_history_enabled: t.Optional(t.Boolean()),

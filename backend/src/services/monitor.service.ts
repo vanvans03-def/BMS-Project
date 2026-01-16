@@ -46,7 +46,12 @@ export const monitorService = {
           if (!ip) throw new Error('No IP Address')
           try {
             // Reuse the same robust connect logic from modbus.service
-            client = await modbusService.connect(ip, port, unitId)
+            client = await modbusService.connect({
+              type: 'TCP',
+              ip,
+              port,
+              timeout: 2000
+            }, unitId)
             return client
           } catch (err) {
             console.error(`❌ [Monitor] Connect failed: ${ip}`, err)
