@@ -89,7 +89,8 @@ export const devicesService = {
     polling_interval?: number | null,
     device_name?: string,
     location_id?: number | null,
-    is_history_enabled?: boolean
+    is_history_enabled?: boolean,
+    config?: any
   }) {
     try {
       const updates: any = {}
@@ -99,7 +100,11 @@ export const devicesService = {
 
       if (data.location_id !== undefined) updates.location_id = data.location_id
       if (data.is_history_enabled !== undefined) updates.is_history_enabled = data.is_history_enabled
+      if (data.location_id !== undefined) updates.location_id = data.location_id
+      if (data.is_history_enabled !== undefined) updates.is_history_enabled = data.is_history_enabled
       if (data.logging_type !== undefined) updates.logging_type = data.logging_type
+      // [NEW] Allow updating Config JSON
+      if (data.config !== undefined) updates.config = data.config
 
 
 

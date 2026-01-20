@@ -18,7 +18,7 @@ export const devicesRoutes = new Elysia({ prefix: '/devices' })
     body: t.Array(t.Object({
       device_name: t.String(),
       device_instance_id: t.Number(),
-      ip_address: t.String(),
+      ip_address: t.Optional(t.Nullable(t.String())),
       network_number: t.Optional(t.Number()),
       protocol: t.Optional(t.String()),
       unit_id: t.Optional(t.Number()),
@@ -57,6 +57,7 @@ export const devicesRoutes = new Elysia({ prefix: '/devices' })
       location_id: t.Optional(t.Nullable(t.Number())),
       is_history_enabled: t.Optional(t.Boolean()),
       logging_type: t.Optional(t.String()),
+      config: t.Optional(t.Any())
 
       // New Report Fields
       // Removed: floor, room, zone, etc. (Moved to Hierarchy)

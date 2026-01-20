@@ -103,3 +103,65 @@ export interface CreateDevicePayload {
   byte_order_float?: string
   byte_order_long?: string
 }
+
+// ==========================================
+// UNIVERSAL CONFIGURATION TYPES
+// ==========================================
+
+export enum UniversalType {
+  BOOLEAN_R = 'BOOLEAN_R',
+  BOOLEAN_W = 'BOOLEAN_W',
+  NUMERIC_R = 'NUMERIC_R',
+  NUMERIC_W = 'NUMERIC_W',
+  STRING = 'STRING'
+}
+
+export interface BacnetDriverConfig {
+  localDeviceId: number
+  objectName: string
+  networkNumber: number
+  transport: {
+    interface: string
+    udpPort: string // HEX String e.g. "0xBAC0"
+  }
+  tuning: {
+    apduTimeout: number
+    retries: number
+  }
+}
+
+export interface BacnetDeviceConfig {
+  deviceId: number // Instance Number
+  address: string  // IP Address
+  communication: {
+    segmentation: 'None' | 'Transmit' | 'Receive' | 'SegmentedBoth'
+    maxApduLength: number
+    useCov: boolean
+  }
+  ping: {
+    method: 'ReadProperty' | 'WhoIs'
+    frequency: number
+  }
+}
+
+export interface UniversalPointConfig {
+  pollFrequency: 'Fast' | 'Normal' | 'Slow'
+  writePriority?: number
+
+  // BACnet specific mapping
+  bacnet?: {
+    objectType: string
+    instanceNumber: number
+    propertyId?: string
+  }
+
+  // Modbus specific mapping
+  modbus?: {
+    address: number
+    dataType: string // e.g. UINT16, FLOAT32
+    scaling?: {
+      factor: number
+      offset: number
+    }
+  }
+}

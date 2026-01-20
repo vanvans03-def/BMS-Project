@@ -1,6 +1,6 @@
 import { Table, Button, Badge, Typography, Tag, Space, Popconfirm, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { DeleteOutlined, FolderOpenOutlined, GlobalOutlined, SettingOutlined } from '@ant-design/icons'
+import { DeleteOutlined, FolderOpenOutlined, GlobalOutlined, SettingOutlined, DatabaseOutlined } from '@ant-design/icons'
 import type { Device } from '../../types/common'
 
 const { Text } = Typography

@@ -17,6 +17,7 @@ interface DiscoveryModalProps {
   loading: boolean
   adding: boolean
   devices: DiscoveredDevice[]
+  scanningPort?: number // [NEW]
   selectedRows: React.Key[]
   existingDeviceIds: Set<number>
   onClose: () => void
@@ -29,6 +30,7 @@ export const DiscoveryModal = ({
   loading,
   adding,
   devices,
+  scanningPort,
   selectedRows,
   existingDeviceIds,
   onClose,
@@ -65,15 +67,22 @@ export const DiscoveryModal = ({
       title={
         <Space>
           <WifiOutlined />
-          <span>
-            {loading 
-              ? 'Scanning Network...' 
-              : showContent && devices.length > 0
-                ? `Found ${devices.length} Device${devices.length > 1 ? 's' : ''}` 
-                : showContent && devices.length === 0
-                  ? 'No Devices Found'
-                  : 'Scan Network for Devices'}
-          </span>
+          <Space direction="vertical" size={0}>
+            <span>
+              {loading
+                ? 'Scanning Network...'
+                : showContent && devices.length > 0
+                  ? `Found ${devices.length} Device${devices.length > 1 ? 's' : ''}`
+                  : showContent && devices.length === 0
+                    ? 'No Devices Found'
+                    : 'Scan Network for Devices'}
+            </span>
+            {scanningPort && (
+              <Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal' }}>
+                Scanning Port: <Text code style={{ fontSize: 12 }}>{scanningPort} (0x{scanningPort.toString(16).toUpperCase()})</Text>
+              </Text>
+            )}
+          </Space>
         </Space>
       }
       open={internalOpen}
@@ -103,9 +112,9 @@ export const DiscoveryModal = ({
     >
       {/* Loading State */}
       {loading && (
-        <div 
-          style={{ 
-            textAlign: 'center', 
+        <div
+          style={{
+            textAlign: 'center',
             padding: '60px 20px',
             minHeight: 300,
             display: 'flex',
@@ -116,8 +125,8 @@ export const DiscoveryModal = ({
           data-aos="fade"
           data-aos-duration="300"
         >
-          <Spin 
-            indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />} 
+          <Spin
+            indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />}
             size="large"
           />
           <Title level={4} style={{ marginTop: 24, marginBottom: 8 }}>
@@ -126,8 +135,8 @@ export const DiscoveryModal = ({
           <Text type="secondary">
             Scanning BACnet network for available devices
           </Text>
-          <div 
-            style={{ 
+          <div
+            style={{
               marginTop: 24,
               padding: '12px 24px',
               background: '#f0f2f5',
@@ -144,21 +153,21 @@ export const DiscoveryModal = ({
 
       {/* Results State - Devices Found */}
       {!loading && showContent && devices.length > 0 && (
-        <div 
+        <div
           style={{
             minHeight: 300
           }}
         >
           <Table
             columns={[
-              { 
-                title: 'Device ID', 
-                dataIndex: 'deviceId', 
+              {
+                title: 'Device ID',
+                dataIndex: 'deviceId',
                 width: 120,
                 render: (val) => <Text strong>{val}</Text>
               },
-              { 
-                title: 'IP Address', 
+              {
+                title: 'IP Address',
                 dataIndex: 'address',
                 render: (val) => <Text code>{val}</Text>
               },
@@ -192,9 +201,9 @@ export const DiscoveryModal = ({
 
       {/* Empty State - No Devices */}
       {!loading && showContent && devices.length === 0 && (
-        <div 
-          style={{ 
-            textAlign: 'center', 
+        <div
+          style={{
+            textAlign: 'center',
             padding: '60px 20px',
             minHeight: 300,
             display: 'flex',

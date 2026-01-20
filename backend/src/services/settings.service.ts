@@ -7,21 +7,32 @@ export const settingsService = {
     try {
       const rows = await sql`SELECT key_name, value_text FROM system_settings`
       const settings: SystemSettings = {}
-      
+
       for (const row of rows) {
         const key = row.key_name
         const value = row.value_text
         const numVal = Number(value)
         if (!isNaN(numVal) && value.trim() !== '') {
-            settings[key] = numVal
+          settings[key] = numVal
         } else {
-            settings[key] = value
+          settings[key] = value
         }
       }
       return settings
     } catch (error) {
       console.error('❌ Get Settings Failed:', error)
       return {}
+    }
+  },
+
+  async getNetworkInterfaces(): Promise<string[]> {
+    try {
+      const os = await import('os')
+      const interfaces = os.networkInterfaces()
+      return Object.keys(interfaces)
+    } catch (error) {
+      console.error('❌ Get Network Interfaces Failed:', error)
+      return []
     }
   },
 

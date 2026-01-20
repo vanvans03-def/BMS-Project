@@ -8,11 +8,15 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     return await settingsService.getSettings()
   })
 
+  .get('/interfaces', async () => {
+    return await settingsService.getNetworkInterfaces()
+  })
+
   .put('/', async ({ body, request }) => {
     const newSettings = body as Record<string, any>
     const userName = getActorName(request)
-    await settingsService.updateSettings(newSettings, userName) 
-    
+    await settingsService.updateSettings(newSettings, userName)
+
     return { success: true, message: 'Settings saved successfully' }
   }, {
     body: t.Record(t.String(), t.Any())

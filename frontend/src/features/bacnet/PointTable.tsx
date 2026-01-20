@@ -9,9 +9,10 @@ import {
   CheckCircleOutlined,
   ThunderboltOutlined,
   InfoCircleOutlined,
-  EditOutlined,
   ClockCircleOutlined,
   LineChartOutlined,
+  SettingOutlined,
+  EditOutlined,
 } from "@ant-design/icons"
 import { useEffect, useRef, useState } from "react"
 import { AnimatedNumber } from "../../components/AnimatedNumber"
@@ -41,9 +42,10 @@ interface PointTableProps {
   loading: boolean
   onWritePoint: (point: Point) => void
   onViewHistory: (point: Point) => void // [NEW]
+  onConfigPoint: (point: Point) => void // [NEW]
 }
 
-export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewHistory }: PointTableProps) => {
+export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewHistory, onConfigPoint }: PointTableProps) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
 
@@ -97,24 +99,34 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
   // ... (Columns คงเดิม) ...
   const columns: ColumnsType<Point> = [
     {
-      title: "Object Type",
-      dataIndex: "object_type",
+      title: "Property",
+      dataIndex: "universal_type",
       key: "type",
       width: 200,
-      render: (text) => {
-        const typeMap: Record<string, { color: string; icon: any }> = {
-          OBJECT_DEVICE: { color: "blue", icon: <DatabaseOutlined /> },
-          OBJECT_ANALOG_INPUT: { color: "green", icon: <ThunderboltOutlined /> },
-          OBJECT_ANALOG_OUTPUT: { color: "orange", icon: <ThunderboltOutlined /> },
-          OBJECT_ANALOG_VALUE: { color: "cyan", icon: <ThunderboltOutlined /> },
-          OBJECT_BINARY_INPUT: { color: "purple", icon: <CheckCircleOutlined /> },
-          OBJECT_BINARY_OUTPUT: { color: "magenta", icon: <CheckCircleOutlined /> },
-          OBJECT_BINARY_VALUE: { color: "volcano", icon: <CheckCircleOutlined /> },
+      render: (text, record: any) => {
+        // Fallback if universal_type is missing
+        const displayType = text || record.object_type?.replace("OBJECT_", "") || "UNKNOWN"
+
+        let color = "default"
+        let icon = <DatabaseOutlined />
+
+        if (displayType.includes("BOOLEAN")) {
+          if (displayType.includes("_R")) { color = "purple"; icon = <CheckCircleOutlined /> } // Read
+          else { color = "magenta"; icon = <ThunderboltOutlined /> } // Write
+        } else if (displayType.includes("NUMERIC")) {
+          if (displayType.includes("_R")) { color = "blue"; icon = <LineChartOutlined /> } // Read
+          else { color = "orange"; icon = <EditOutlined /> } // Write
+        } else if (displayType.includes("STRING")) {
+          color = "cyan"; icon = <InfoCircleOutlined />
+        } else {
+          // Fallback colors for raw types
+          if (displayType.includes("BINARY")) color = "purple"
+          else if (displayType.includes("ANALOG")) color = "blue"
         }
-        const config = typeMap[text] || { color: "default", icon: null }
+
         return (
-          <Tag color={config.color} icon={config.icon} style={{ transition: "all 0.3s ease" }}>
-            {text.replace("OBJECT_", "")}
+          <Tag color={color} icon={icon} style={{ transition: "all 0.3s ease", minWidth: 100, textAlign: 'center' }}>
+            {displayType}
           </Tag>
         )
       },
@@ -253,6 +265,16 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
                 icon={<LineChartOutlined />}
                 size="small"
                 onClick={() => onViewHistory(record)}
+                style={{ transition: "all 0.2s ease" }}
+                className="hover-lift"
+              />
+            </Tooltip>
+
+            <Tooltip title="Configuration">
+              <Button
+                icon={<SettingOutlined />}
+                size="small"
+                onClick={() => onConfigPoint(record)}
                 style={{ transition: "all 0.2s ease" }}
                 className="hover-lift"
               />

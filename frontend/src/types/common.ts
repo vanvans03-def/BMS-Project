@@ -3,7 +3,7 @@ export interface Device {
   id: number
   device_name: string
   device_instance_id?: number
-  ip_address: string
+  ip_address?: string
   network_number?: number
   protocol?: 'BACNET' | 'MODBUS'
   unit_id?: number
@@ -11,6 +11,16 @@ export interface Device {
   polling_interval?: number | null
   device_type?: 'GATEWAY' | 'DEVICE'
   parent_id?: number | null
+  config?: any
+
+  // Serial / Modbus Fields
+  connection_type?: string
+  serial_port_name?: string
+  serial_baud_rate?: number
+  serial_data_bits?: number
+  serial_stop_bits?: number
+  serial_parity?: string
+  tcp_response_timeout?: number
 }
 
 export interface Point {
@@ -24,6 +34,7 @@ export interface Point {
   data_type?: string
   data_format?: string
   display_type?: string
+  config?: any
 }
 
 export interface PointValue {

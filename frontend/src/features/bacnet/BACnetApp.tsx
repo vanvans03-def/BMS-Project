@@ -7,7 +7,8 @@ import {
   WifiOutlined, ArrowLeftOutlined, SyncOutlined, GlobalOutlined,
   ApiOutlined,
   FileTextOutlined,
-  LineChartOutlined
+  LineChartOutlined,
+  SettingOutlined
 } from "@ant-design/icons"
 import AOS from 'aos'
 
@@ -24,6 +25,7 @@ import { LogsPage } from "../../components/LogsPage"
 import { ProfileModal } from "../../components/ProfileModal"
 import HistoryGraphPanel from "../central_logs/HistoryGraphPanel"
 import HistoryLogsPanel from "../central_logs/HistoryLogsPanel"
+import { ConfigurationModal } from "./ConfigurationModal"
 
 import type { Device, Point, PointValue } from "../../types/common"
 
@@ -56,6 +58,15 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
   const [writeValue, setWriteValue] = useState<string | number>("")
   const [writePriority, setWritePriority] = useState<number>(8)
   const [isWriting, setIsWriting] = useState(false)
+
+  // [Refactored] Generic Config Modal State
+  const [configModal, setConfigModal] = useState<{
+    open: boolean
+    type: 'DRIVER' | 'DEVICE' | 'POINT'
+    targetId: number | null
+    initialConfig: any
+    title?: string
+  }>({ open: false, type: 'DRIVER', targetId: null, initialConfig: null })
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
@@ -139,9 +150,21 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
 
   const handleMenuClick = (key: string) => { setCurrentView(key); if (key === 'dashboard') setSelectedDevice(null); }
 
+  const [scanningPort, setScanningPort] = useState<number | undefined>(undefined) // [NEW]
+
   const handleScan = async () => {
-    setIsDiscoveryModalOpen(true); setIsScanning(true); setDiscoveredDevices([]);
-    try { const res = await authFetch('/devices/discover'); setDiscoveredDevices(await res.json()); }
+    setIsDiscoveryModalOpen(true); setIsScanning(true); setDiscoveredDevices([]); setScanningPort(undefined);
+    try {
+      const res = await authFetch('/devices/discover');
+      const data = await res.json();
+      // Handle legacy or new format
+      if (Array.isArray(data)) {
+        setDiscoveredDevices(data);
+      } else if (data.devices) {
+        setDiscoveredDevices(data.devices);
+        setScanningPort(data.scanningPort);
+      }
+    }
     catch { messageApi.error("Scan Failed"); } finally { setIsScanning(false); }
   }
 
@@ -200,6 +223,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
             <Space>
               <Input prefix={<SearchOutlined />} placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: 200 }} />
               <Button icon={<ReloadOutlined />} onClick={() => refetchDevices()}>Refresh</Button>
+
               <Button type="primary" icon={<PlusOutlined />} onClick={handleScan}>Discovery</Button>
             </Space>
           </Col>
@@ -220,6 +244,15 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
                 pollingInterval: d.polling_interval
               });
               setIsEditPollingOpen(true);
+            }}
+            onConfigDevice={(d) => {
+              setConfigModal({
+                open: true,
+                type: 'DEVICE',
+                targetId: d.id,
+                initialConfig: d.config, // Ensure backend returns 'config'
+                title: `Device Config: ${d.device_name}`
+              })
             }}
           />
         </Card>
@@ -258,6 +291,20 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
             loading={isLoadingPoints}
             onWritePoint={(p) => { setWritingPoint(p); setWriteValue(pointValues.get(p.id)?.value ?? ""); setIsWriteModalOpen(true) }}
             onViewHistory={(p) => setHistoryPoint(p)}
+            onConfigPoint={(p) => {
+              // Point object might not have 'config' if the DTO didn't include it.
+              // We need to ensure 'points' data includes 'config'.
+              // Based on pointsService.getPointsByDeviceId, it selects 'register_type', 'data_type' etc.
+              // It probably doesn't select 'config' yet. I need to update points.service.ts
+              // However, for now let's assume it's there or handle null.
+              setConfigModal({
+                open: true,
+                type: 'POINT',
+                targetId: p.id,
+                initialConfig: (p as any).config || {},
+                title: `Point Config: ${p.point_name}`
+              })
+            }}
           />
         </Card>
       </div>
@@ -346,7 +393,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
         </Card>
       )}
 
-      <DiscoveryModal open={isDiscoveryModalOpen} loading={isScanning} adding={isAdding} devices={discoveredDevices} selectedRows={selectedDiscoveryRows} existingDeviceIds={existingDeviceIds} onClose={() => setIsDiscoveryModalOpen(false)} onAdd={handleAddSelected} onSelectionChange={setSelectedDiscoveryRows} />
+      <DiscoveryModal open={isDiscoveryModalOpen} loading={isScanning} adding={isAdding} devices={discoveredDevices} scanningPort={scanningPort} selectedRows={selectedDiscoveryRows} existingDeviceIds={existingDeviceIds} onClose={() => setIsDiscoveryModalOpen(false)} onAdd={handleAddSelected} onSelectionChange={setSelectedDiscoveryRows} />
 
       <Modal title="Edit Device Configuration" open={isEditPollingOpen} onCancel={() => setIsEditPollingOpen(false)} footer={null} width={400}>
         <div style={{ marginBottom: 16 }}><Text type="secondary">Target Device: </Text><Text strong>{deviceToEdit?.device_name}</Text></div>
@@ -362,6 +409,21 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       <Modal title={null} open={historyPoint !== null} onCancel={() => setHistoryPoint(null)} footer={null} width={1000} styles={{ body: { padding: 0 } }} destroyOnClose>
         {historyPoint && selectedDevice && (<HistoryGraphPanel initialSelection={[{ deviceName: selectedDevice.device_name, pointName: historyPoint.point_name }]} />)}
       </Modal>
+
+      {/* Generic Configuration Modal */}
+      <ConfigurationModal
+        open={configModal.open}
+        onClose={() => setConfigModal(prev => ({ ...prev, open: false }))}
+        onSave={() => {
+          messageApi.success('Configuration saved');
+          refetchDevices();
+          refetchPoints();
+        }}
+        type={configModal.type}
+        targetId={configModal.targetId}
+        initialConfig={configModal.initialConfig}
+        title={configModal.title}
+      />
     </DashboardLayout>
   )
 }

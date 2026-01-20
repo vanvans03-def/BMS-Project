@@ -1,9 +1,10 @@
-import { Card, Typography, Row, Col, Space, Button, Modal, Tooltip } from 'antd'
+import { Card, Typography, Row, Col, Space, Button, message, Tooltip } from 'antd'
 import { ApiOutlined, DatabaseOutlined, RightOutlined, SettingOutlined, AppstoreOutlined, FileTextOutlined, ClusterOutlined } from '@ant-design/icons'
 import AOS from 'aos'
 import { useEffect, useState } from 'react'
 import { DashboardLayout } from '../../components/layout/DashboardLayout'
-import { NetworkSettings } from '../../components/SettingsTabs'
+import { ConfigurationModal } from '../bacnet/ConfigurationModal'
+import { authFetch } from '../../utils/authFetch'
 
 const { Title, Text } = Typography
 
@@ -12,7 +13,7 @@ interface PortalPageProps {
 }
 
 export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [messageApi, contextHolder] = message.useMessage()
 
   useEffect(() => {
     AOS.refresh()
@@ -28,13 +29,43 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
     background: 'white' // Ensure cards stay white
   }
 
-  // State to track which settings to open
-  const [settingsProtocol, setSettingsProtocol] = useState<'BACNET' | 'MODBUS' | null>(null)
+  // Unified Config Modal State
+  const [configModal, setConfigModal] = useState<{
+    open: boolean
+    type: 'DRIVER' | 'DEVICE' | 'POINT'
+    targetId: number | null
+    initialConfig: any
+    title?: string
+  }>({ open: false, type: 'DRIVER', targetId: null, initialConfig: null })
 
-  const handleSettingsClick = (protocol: 'BACNET' | 'MODBUS') => (e: React.MouseEvent) => {
+  const handleSettingsClick = (protocol: 'BACNET' | 'MODBUS') => async (e: React.MouseEvent) => {
     e.stopPropagation()
-    setSettingsProtocol(protocol)
-    setIsSettingsOpen(true)
+
+    // Fetch the driver for this protocol
+    try {
+      const res = await authFetch('/devices')
+      const allDevices = await res.json()
+
+      const protocolKey = protocol === 'BACNET' ? 'BACNET_IP' : 'MODBUS' // Adjust based on your backend protocol strings
+      const driver = (Array.isArray(allDevices) ? allDevices : []).find(
+        (d: any) => d.device_type === 'DRIVER' && (d.protocol === protocolKey || d.protocol === protocol)
+      )
+
+      if (driver) {
+        setConfigModal({
+          open: true,
+          type: 'DRIVER', // Using DRIVER type for global settings
+          targetId: driver.id,
+          initialConfig: driver.config,
+          title: `${protocol} Driver Configuration`
+        })
+      } else {
+        messageApi.warning(`No ${protocol} Driver found.`)
+      }
+    } catch (err) {
+      console.error(err)
+      messageApi.error('Failed to load driver settings')
+    }
   }
 
   // Header Actions (Restoring Tab-like feel)
@@ -74,6 +105,7 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
       headerActions={headerActions}
       contentStyle={{ background: 'transparent', boxShadow: 'none' }} // Darker background
     >
+      {contextHolder}
       <div style={{ maxWidth: 900, margin: '0 auto', paddingTop: 40 }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <Title level={2}>Welcome to BMS Portal</Title>
@@ -161,17 +193,19 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
           </Col>
         </Row >
 
-        {/* Network Settings Modal */}
-        < Modal
-          title={`${settingsProtocol === 'MODBUS' ? 'Modbus' : 'Network'} Configuration`}
-          open={isSettingsOpen}
-          onCancel={() => setIsSettingsOpen(false)}
-          footer={null}
-          width={800}
-          destroyOnClose
-        >
-          <NetworkSettings filterProtocol={settingsProtocol || 'BACNET'} />
-        </Modal >
+        {/* Universal Configuration Modal */}
+        <ConfigurationModal
+          open={configModal.open}
+          onClose={() => setConfigModal(prev => ({ ...prev, open: false }))}
+          onSave={() => {
+            messageApi.success('Configuration saved')
+            // Optionally refetch anything if needed
+          }}
+          type={configModal.type}
+          targetId={configModal.targetId}
+          initialConfig={configModal.initialConfig}
+          title={configModal.title}
+        />
       </div >
 
       <style>{`

@@ -3,7 +3,7 @@ import { sql } from '../db'
 import { settingsService } from './settings.service'
 
 // Interface for Connection Parameters
-interface ConnectionParams {
+export interface ConnectionParams {
   type: 'TCP' | 'SERIAL'
   ip?: string
   port?: number
@@ -21,7 +21,10 @@ export const connectClient = async (params: ConnectionParams, unitId: number) =>
     const timeout = params.timeout || 5000
     client.setTimeout(timeout)
 
-    if (params.type === 'SERIAL' && params.serialPort) {
+    // Check strict equality to avoid undefined errors
+    if (params.type === 'SERIAL') {
+      if (!params.serialPort) throw new Error('Serial Port is required for SERIAL connection')
+
       // Connect Serial (RTU)
       await client.connectRTUBuffered(params.serialPort, {
         baudRate: params.baudRate || 9600,
@@ -53,7 +56,7 @@ export const connectClient = async (params: ConnectionParams, unitId: number) =>
 }
 
 // Helper to get connection params for a Point or Device
-const getConnectionInfo = async (deviceId: number) => {
+export const getConnectionInfo = async (deviceId: number) => {
   // Fetch device and its parent to determine connection path
   const [device] = await sql`
     SELECT 

@@ -1,6 +1,6 @@
 import { sql } from '../db'
 import { bacnetService } from './bacnet.service'
-import { modbusService } from './modbus.service'
+import { modbusService, getConnectionInfo } from './modbus.service'
 import type { ReadRequestDto } from '../dtos/bacnet.dto'
 import type { MonitorResponse } from '../dtos/monitor.dto'
 
@@ -28,33 +28,22 @@ export const monitorService = {
       // CASE A: MODBUS
       // -------------------------------------------------------
       if (device.protocol === 'MODBUS') {
-        let ip = device.ip_address
-        const unitId = device.unit_id || 1
-        let port = 502 // Default Modbus Port
-
-        if (ip && ip.includes(':')) {
-          const parts = ip.split(':')
-          ip = parts[0]
-          port = parseInt(parts[1]) || 502
-        }
+        // [REF] Use shared connection info helper to support RTU & Gateway
+        const connectionInfo = await getConnectionInfo(deviceId)
+        const params = connectionInfo.params
+        const unitId = connectionInfo.unitId || 1
 
         let client: any = null
 
         // Helper to connect/reconnect
         const ensureConnected = async () => {
           if (client) return client
-          if (!ip) throw new Error('No IP Address')
           try {
             // Reuse the same robust connect logic from modbus.service
-            client = await modbusService.connect({
-              type: 'TCP',
-              ip,
-              port,
-              timeout: 2000
-            }, unitId)
+            client = await modbusService.connect(params, unitId)
             return client
           } catch (err) {
-            console.error(`❌ [Monitor] Connect failed: ${ip}`, err)
+            console.error(`❌ [Monitor] Connect failed:`, err)
             throw err
           }
         }

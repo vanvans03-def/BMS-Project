@@ -18,8 +18,11 @@ class PointsService {
         is_monitor, 
         created_at,
         register_type, 
+        register_type, 
         data_type,
-        data_format 
+        data_format,
+        config,
+        universal_type
       FROM points 
       WHERE device_id = ${deviceId} 
       ORDER BY object_type, object_instance
@@ -32,15 +35,54 @@ class PointsService {
     if (!device) throw new Error('Device not found')
     const objects = await bacnetService.getObjects(device.device_instance_id)
     if (objects.length === 0) return { success: false, message: 'No objects' }
+
     await sql`DELETE FROM points WHERE device_id = ${deviceId}`
-    const pointsToInsert = objects.map(obj => ({
-      device_id: deviceId,
-      object_type: obj.objectType,
-      object_instance: obj.instance,
-      point_name: `${obj.objectType}_${obj.instance}`,
-      is_monitor: true
-    }))
-    const result = await sql`INSERT INTO points ${sql(pointsToInsert)} RETURNING *`
+
+    const pointsToInsert = objects.map(obj => {
+      // 1. Determine Universal Type
+      let universalType = 'NUMERIC_R' // Default
+      const typeLower = obj.objectType.toLowerCase()
+
+      if (typeLower.includes('binary') || typeLower.includes('digital')) {
+        if (typeLower.includes('input')) universalType = 'BOOLEAN_R'
+        else universalType = 'BOOLEAN_W' // Output or Value
+      } else if (typeLower.includes('analog') || typeLower.includes('multistate')) {
+        if (typeLower.includes('input')) universalType = 'NUMERIC_R'
+        else universalType = 'NUMERIC_W'
+      } else if (typeLower.includes('accumulator') || typeLower.includes('loop')) {
+        universalType = 'NUMERIC_R'
+      } else if (typeLower.includes('characterstring') || typeLower.includes('string')) {
+        universalType = 'STRING'
+      }
+
+      // 2. Create Config
+      const pointConfig = {
+        pollFrequency: "Normal",
+        bacnet: {
+          objectType: obj.objectType,
+          instanceNumber: obj.instance
+        },
+        type: universalType
+      }
+
+      return {
+        device_id: deviceId,
+        object_type: obj.objectType,
+        object_instance: obj.instance,
+        point_name: `${obj.objectType}_${obj.instance}`,
+        is_monitor: true,
+        universal_type: universalType || 'NUMERIC_R', // Fallback
+        config: pointConfig // Pass raw object, postgres.js handles jsonb
+      }
+    })
+
+    // Debug log (will appear in backend console)
+    console.log('Syncing Points Sample:', pointsToInsert[0])
+
+    const result = await sql`
+        INSERT INTO points ${sql(pointsToInsert, 'device_id', 'object_type', 'object_instance', 'point_name', 'is_monitor', 'universal_type', 'config')} 
+        RETURNING *
+    `
     return { success: true, count: result.length, points: Array.from(result) as Point[] }
   }
 

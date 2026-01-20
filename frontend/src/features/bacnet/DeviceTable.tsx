@@ -14,10 +14,11 @@ interface DeviceTableProps {
   defaultPollingInterval: number // [NEW]
   onViewDevice: (device: Device) => void
   onEditDevice: (device: Device) => void // [NEW] (Renamed from onEditPolling)
+  onConfigDevice: (device: Device) => void // [NEW] Open Universal Config
   searchText: string
 }
 
-export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDevice, onEditDevice, searchText }: DeviceTableProps) => {
+export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDevice, onEditDevice, onConfigDevice, searchText }: DeviceTableProps) => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
@@ -93,11 +94,14 @@ export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDe
       title: 'Action',
       key: 'action',
       align: 'center',
-      width: 120,
+      width: 180,
       render: (_, record) => (
-        <Button type="primary" size="small" onClick={() => onViewDevice(record)}>
-          View Points
-        </Button>
+        <Space>
+          <Button type="default" size="small" icon={<SettingOutlined />} onClick={(e) => { e.stopPropagation(); onConfigDevice(record); }} />
+          <Button type="primary" size="small" onClick={() => onViewDevice(record)}>
+            View Points
+          </Button>
+        </Space>
       )
     }
   ]
