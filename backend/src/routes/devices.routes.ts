@@ -4,8 +4,13 @@ import { devicesService } from '../services/devices.service'
 
 export const devicesRoutes = new Elysia({ prefix: '/devices' })
 
-  .get('/', async () => {
-    return await devicesService.getAllDevices()
+  .get('/', async ({ query }) => {
+    const locationId = query.location_id ? Number(query.location_id) : undefined
+    return await devicesService.getAllDevices(locationId)
+  }, {
+    query: t.Object({
+      location_id: t.Optional(t.String())
+    })
   })
 
   .get('/discover', async () => {

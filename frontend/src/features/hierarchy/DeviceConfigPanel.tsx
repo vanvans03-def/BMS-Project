@@ -9,9 +9,10 @@ interface DeviceConfigPanelProps {
     selectedLocation: any
     refreshTrigger?: number // To reload when device added to loc
     onNavigate: (system: 'BACNET' | 'MODBUS', deviceId: number) => void
+    showHistoryOnly?: boolean // [NEW]
 }
 
-export const DeviceConfigPanel = ({ selectedLocation, refreshTrigger, onNavigate }: DeviceConfigPanelProps) => {
+export const DeviceConfigPanel = ({ selectedLocation, refreshTrigger, onNavigate, showHistoryOnly = false }: DeviceConfigPanelProps) => {
     const [devices, setDevices] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [editingDevice, setEditingDevice] = useState<any>(null)
@@ -158,13 +159,15 @@ export const DeviceConfigPanel = ({ selectedLocation, refreshTrigger, onNavigate
         }
     ]
 
+    const filteredDevices = devices.filter(d => !showHistoryOnly || d.is_history_enabled)
+
     if (!selectedLocation) return <div style={{ textAlign: 'center', marginTop: 40, color: '#999' }}>Select a location to view devices</div>
 
     return (
         <div data-aos="fade-in" data-aos-duration="600">
             {contextHolder}
             <Table
-                dataSource={devices}
+                dataSource={filteredDevices}
                 columns={columns}
                 rowKey="id"
                 size="small"

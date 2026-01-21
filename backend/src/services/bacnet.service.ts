@@ -211,17 +211,21 @@ export const bacnetService = {
       // URL Pattern ตาม C# Swagger
       const url = `/ReadWrite/devices/${req.deviceId}/objects/${req.objectType}/${req.instance}/properties/${req.propertyId}`
 
-      console.log(`📝 [BACNET] Writing to ${url} Value: ${req.value}`)
+      console.log(`📝 [BACNET DEBUG] URL: ${url}`)
+      console.log(`📝 [BACNET DEBUG] Body:`, JSON.stringify({ value: req.value }))
+      console.log(`📝 [BACNET DEBUG] Value Type: ${typeof req.value}`)
 
       // ส่ง Body ไปให้ C# (C# จะไปจัดการ Type conversion เองตามที่เราแก้ไว้แล้ว)
+      // [FIX] User supplied example has NO priority and uses raw value.
+      // Schema also shows no priority field.
       await client.put(url, {
         value: req.value
       })
 
       return true
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Write Failed:', error)
-      throw error
+      throw new Error(`Write Failed: ${error.response?.data?.title || error.message}`);
     }
   }
 }

@@ -118,12 +118,22 @@ class PointsService {
     }
 
     // 4. ส่งคำสั่งเขียนค่า (Write)
+    // [FIX] Reverting to strict types based on User's working example: { "value": 22 }
+    let safeValue = value;
+    const typeLower = point.object_type.toLowerCase();
+
+    if (typeLower.includes('analog') || typeLower.includes('multistate') || typeLower.includes('accumulator')) {
+      // User confirmed { "value": 22 } works, so we send Number.
+      safeValue = Number(value);
+    }
+    // For Binary/Digital, we keep as is (likely String "active" or "inactive" or Boolean/Number 0/1)
+
     const bacnetRequest: WriteRequestDto = {
       deviceId: device.device_instance_id,
       objectType: point.object_type,
       instance: point.object_instance,
       propertyId: 'PROP_PRESENT_VALUE',
-      value: value,
+      value: safeValue,
       priority: priority
     }
 

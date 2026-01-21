@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Layout, Card, Typography, Divider } from "antd"
+import { Layout, Card, Typography, Divider, Switch } from "antd"
 import { ApartmentOutlined } from "@ant-design/icons"
 import AOS from 'aos'
 import { DashboardLayout } from "../../components/layout/DashboardLayout"
@@ -11,9 +11,6 @@ import { DeviceConfigPanel } from "./DeviceConfigPanel"
 const { Content, Sider } = Layout
 const { Title, Text } = Typography
 
-// Placeholders removed
-
-
 interface HierarchyAppProps {
     onBack: () => void
     onNavigate: (system: 'BACNET' | 'MODBUS', deviceId: number) => void
@@ -23,6 +20,7 @@ interface HierarchyAppProps {
 export default function HierarchyApp({ onBack, onNavigate, embedded = false }: HierarchyAppProps) {
     const [selectedLocation, setSelectedLocation] = useState<any>(null)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
+    const [showHistoryOnly, setShowHistoryOnly] = useState(false) // [NEW]
 
     const triggerRefresh = () => setRefreshTrigger(prev => prev + 1)
 
@@ -40,10 +38,14 @@ export default function HierarchyApp({ onBack, onNavigate, embedded = false }: H
                 data-aos={embedded ? undefined : "fade-right"}
                 data-aos-delay={embedded ? undefined : "100"}
             >
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text strong>Hierarchy Structure</Text>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>History Only</Text>
+                        <Switch size="small" checked={showHistoryOnly} onChange={setShowHistoryOnly} />
+                    </div>
                 </div>
-                <LocationTreePanel onSelectLocation={setSelectedLocation} />
+                <LocationTreePanel onSelectLocation={setSelectedLocation} showHistoryOnly={showHistoryOnly} />
             </Sider>
 
             {/* Center: Config */}
@@ -65,6 +67,7 @@ export default function HierarchyApp({ onBack, onNavigate, embedded = false }: H
                         selectedLocation={selectedLocation}
                         refreshTrigger={refreshTrigger}
                         onNavigate={onNavigate}
+                        showHistoryOnly={showHistoryOnly}
                     />
                 </Card>
             </Content>

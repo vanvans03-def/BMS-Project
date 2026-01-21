@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Tree, Button, Dropdown, Modal, Form, Input, Select, message } from 'antd'
 import {
     PlusOutlined, FolderOutlined, HomeOutlined,
@@ -9,13 +9,15 @@ import { authFetch } from '../../utils/authFetch'
 
 interface LocationTreePanelProps {
     onSelectLocation: (node: any) => void
+    showHistoryOnly?: boolean // [NEW]
 }
 
-export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) => {
-    const [treeData, setTreeData] = useState<DataNode[]>([])
+export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }: LocationTreePanelProps) => {
+    // treeData and getValidNodes removed/unused
     const [locations, setLocations] = useState<any[]>([])
-    const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]) // [NEW] Control expansion
-    const [autoExpandParent, setAutoExpandParent] = useState(true)    // [NEW]
+    const [historyLocationIds, setHistoryLocationIds] = useState<Set<number>>(new Set()) // [NEW] Locations containing history devices
+    const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
+    const [autoExpandParent, setAutoExpandParent] = useState(true)
 
     const [messageApi, contextHolder] = message.useMessage()
 
@@ -25,67 +27,88 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
     const [parentForAdd, setParentForAdd] = useState<number | null>(null)
     const [form] = Form.useForm()
 
-    const fetchLocations = async () => {
-
+    const fetchLocationsAndDevices = async () => {
         try {
-            const res = await authFetch('/locations')
-            const data = await res.json()
-            setLocations(data)
-            // setTreeData handled by useEffect
-            // Expand all by default on first load?
-            const allKeys = data.map((d: any) => String(d.id))
+            // 1. Fetch Locations
+            const locRes = await authFetch('/locations')
+            const locData = await locRes.json()
+            setLocations(locData)
+
+            const allKeys = locData.map((d: any) => String(d.id))
             setExpandedKeys(allKeys)
 
-        } catch (err) {
-            messageApi.error('Failed to load locations')
-        } finally {
+            // 2. Fetch Devices (Only for mapping)
+            const devRes = await authFetch('/devices')
+            const devData = await devRes.json()
 
+            // 3. Identify Locations with History Devices
+            const locsWithHistory = new Set<number>()
+            devData.forEach((d: any) => {
+                if (d.location_id && d.is_history_enabled) {
+                    locsWithHistory.add(d.location_id)
+                }
+            })
+            setHistoryLocationIds(locsWithHistory)
+
+        } catch (err) {
+            messageApi.error('Failed to load hierarchy data')
         }
     }
 
     useEffect(() => {
-        fetchLocations()
+        fetchLocationsAndDevices()
     }, [])
 
-    // Memoized Tree Builder (merged loop logic here for efficiency)
-    const processTreeData = (list: any[]): DataNode[] => {
+    // Helper: Build set of IDs that contain history devices (recursive)
+    const activeHistoryPathIds = useMemo(() => {
+        const activeIds = new Set<number>()
+        const parentMap = new Map<number, number | null>()
+        locations.forEach(l => parentMap.set(l.id, l.parent_id))
+
+        // Start with direct locations
+        const openSet = [...historyLocationIds]
+
+        openSet.forEach(id => {
+            let curr: number | null = id
+            while (curr && !activeIds.has(curr)) {
+                activeIds.add(curr)
+                curr = parentMap.get(curr) || null
+            }
+        })
+        return activeIds
+    }, [locations, historyLocationIds])
+
+    // Memoized Tree Builder (No longer filters, just maps)
+    const treeDataNodes = useMemo(() => {
         const map: any = {}
         const roots: any[] = []
 
         // 1. Create Nodes
-        list.forEach((node) => {
+        locations.forEach((node) => {
             const key = String(node.id)
             map[key] = {
                 ...node,
                 key,
-                // Pre-calculate title here or in render? 
-                // Doing it here avoids re-render calculation loop
                 title: node.name,
                 children: []
             }
-            // Icon
             if (node.type === 'Building') map[key].icon = <HomeOutlined />
             else if (node.type === 'Floor') map[key].icon = <AppstoreOutlined />
             else map[key].icon = <FolderOutlined />
         })
 
         // 2. Link Parent-Child
-        list.forEach(node => {
+        locations.forEach(node => {
             const key = String(node.id)
             const parentKey = node.parent_id ? String(node.parent_id) : null
 
             if (parentKey && map[parentKey]) {
                 map[parentKey].children.push(map[key])
-            } else {
+            } else if (!node.parent_id) {
                 roots.push(map[key])
             }
         })
         return roots
-    }
-
-    // Update tree when locations change
-    useEffect(() => {
-        setTreeData(processTreeData(locations))
     }, [locations])
 
     // Handlers
@@ -103,9 +126,7 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
         setIsModalOpen(true)
     }
 
-    const handleDelete = async (id: number) => { // id passed is key (string) or number?
-        // tree node key is string now. But API expects number.
-        // Let's coerce.
+    const handleDelete = async (id: number) => {
         const numId = Number(id)
         Modal.confirm({
             title: 'Delete Location?',
@@ -137,7 +158,6 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
                     body: JSON.stringify(payload)
                 })
                 savedItem = await res.json()
-                // Update Local
                 setLocations(prev => prev.map(l => l.id === savedItem.id ? savedItem : l))
             } else {
                 const res = await authFetch('/locations', {
@@ -145,10 +165,7 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
                     body: JSON.stringify(payload)
                 })
                 savedItem = await res.json()
-                // Add Local
                 setLocations(prev => [...prev, savedItem])
-
-                // Auto Expand Parent
                 if (payload.parent_id) {
                     setExpandedKeys(prev => [...prev, String(payload.parent_id)])
                     setAutoExpandParent(true)
@@ -156,8 +173,6 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
             }
             messageApi.success('Saved')
             setIsModalOpen(false)
-            // fetchLocations() // No need to re-fetch
-
         } catch {
             messageApi.error('Failed to save')
         }
@@ -165,9 +180,25 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
 
     // Render Request
     const renderTitle = (node: any) => {
+        // [NEW] Styling Logic
+        const isActive = activeHistoryPathIds.has(node.id)
+        let style: React.CSSProperties = {}
+
+        if (showHistoryOnly) {
+            if (isActive) {
+                style = { fontWeight: 'bold', color: '#1890ff' } // Highlight
+                // If it's a leaf folder containing history devices, maybe stronger?
+                if (historyLocationIds.has(node.id)) {
+                    style = { ...style, background: '#e6f7ff', padding: '0 4px', borderRadius: 4 }
+                }
+            } else {
+                style = { color: '#ccc' } // Grey out
+            }
+        }
+
         return (
             <div className="tree-node-title" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: 8 }}>
-                <span>{node.title}</span>
+                <span style={style}>{node.title}</span>
                 <Dropdown menu={{
                     items: [
                         { key: 'add', label: 'Add Sub-folder', icon: <PlusOutlined />, onClick: (e) => { e.domEvent.stopPropagation(); handleAdd(node.key) } },
@@ -182,8 +213,6 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
         )
     }
 
-    // Recursive loop to inject custom render (only mapping title to Component)
-    // This is still needed because Dropdown closures need access to current handleAdd/Edit
     const loop = (data: DataNode[]): DataNode[] =>
         data.map(item => ({
             ...item,
@@ -202,14 +231,13 @@ export const LocationTreePanel = ({ onSelectLocation }: LocationTreePanelProps) 
                 <Tree
                     showIcon
                     blockNode
-                    // Control expansion
                     expandedKeys={expandedKeys}
                     autoExpandParent={autoExpandParent}
                     onExpand={(keys) => {
                         setExpandedKeys(keys)
                         setAutoExpandParent(false)
                     }}
-                    treeData={loop(treeData)}
+                    treeData={loop(treeDataNodes)}
                     onSelect={(selectedKeys, info) => {
                         if (selectedKeys.length > 0) onSelectLocation(info.node)
                     }}

@@ -6,7 +6,11 @@ import type { CreateDevicePayload } from '../dtos/bacnet.dto'
 
 export const devicesService = {
   // ... (getAllDevices, discoverDevices, addDevices เดิมคงไว้) ...
-  async getAllDevices() {
+  async getAllDevices(locationId?: number) {
+    if (locationId) {
+      const rows = await sql`SELECT * FROM devices WHERE location_id = ${locationId} ORDER BY created_at ASC`
+      return [...rows]
+    }
     const rows = await sql`SELECT * FROM devices ORDER BY created_at ASC`
     return [...rows]
   },
