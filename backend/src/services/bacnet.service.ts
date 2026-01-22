@@ -12,9 +12,10 @@ import type {
   BacnetDriverConfig
 } from '../dtos/bacnet.dto'
 import { sql } from '../db'
+import { configService } from './config.service'
 
 // ใช้ Config จาก .env
-const BACnet_API_URL = Bun.env.BACNET_API_URL || 'https://localhost:7174/api'
+const BACnet_API_URL = process.env.BACNET_API_URL || 'https://localhost:7174/api'
 
 const client = axios.create({
   baseURL: BACnet_API_URL,
@@ -78,43 +79,63 @@ export const bacnetService = {
     try {
       console.log(`🔍 [BACNET] Discovery with timeout=${timeout}s...`)
 
-      // 1. Get Driver Config from DB
+      // 1. Get Network Config from new config table (or fallback to old driver)
       let bacnetPort = 47808 // Default 0xBAC0
       let bacnetInterface = 'eth0'
+      let localDeviceId = 389001
 
       try {
-        const drivers = await sql<any[]>`
-            SELECT config FROM devices 
-            WHERE device_type = 'DRIVER' AND protocol = 'BACNET_IP' 
-            LIMIT 1
-        `
+        // Try to load from new network_config table
+        const networkConfigs = await configService.getNetworkConfigs('BACNET')
+        
+        if (networkConfigs.length > 0) {
+          const networkConfig = networkConfigs[0]!
+          const config = networkConfig.config || {}
+          
+          // Extract settings from new config structure
+          bacnetPort = config.port || 47808
+          bacnetInterface = config.interface || 'eth0'
+          localDeviceId = config.localDeviceId || 389001
 
-        if (drivers.length > 0 && drivers[0].config) {
-          const config = drivers[0].config as BacnetDriverConfig
-
-          // Extract Port
-          if (config.transport?.udpPort) {
-            // Parse HEX String e.g. "0xBAC0" -> 47808
-            const portStr = config.transport.udpPort
-            if (typeof portStr === 'string' && portStr.startsWith('0x')) {
-              bacnetPort = parseInt(portStr, 16)
-            } else {
-              bacnetPort = Number(portStr)
-            }
-          }
-
-          // Extract Interface
-          if (config.transport?.interface) {
-            bacnetInterface = config.transport.interface
-          }
-
-          console.log(`⚙️ [BACNET] Using Config -> Port: ${bacnetPort} (0x${bacnetPort.toString(16).toUpperCase()}), Interface: ${bacnetInterface}`)
+          console.log(`⚙️ [BACNET] Using Network Config -> Port: ${bacnetPort} (0x${bacnetPort.toString(16).toUpperCase()}), Interface: ${bacnetInterface}, LocalDeviceId: ${localDeviceId}`)
         } else {
-          console.warn('⚠️ No BACnet Driver config found, using defaults')
+          // Fallback: Try to load from old driver (for backward compatibility)
+          const drivers = await sql<any[]>`
+              SELECT config FROM devices 
+              WHERE device_type = 'DRIVER' AND (protocol = 'BACNET_IP' OR protocol = 'BACNET')
+              LIMIT 1
+          `
+
+          if (drivers.length > 0 && drivers[0].config) {
+            const config = drivers[0].config as BacnetDriverConfig
+
+            // Extract Port
+            if (config.transport?.udpPort) {
+              const portStr = config.transport.udpPort
+              if (typeof portStr === 'string' && portStr.startsWith('0x')) {
+                bacnetPort = parseInt(portStr, 16)
+              } else {
+                bacnetPort = Number(portStr)
+              }
+            }
+
+            // Extract Interface
+            if (config.transport?.interface) {
+              bacnetInterface = config.transport.interface
+            }
+
+            if (config.localDeviceId) {
+              localDeviceId = config.localDeviceId
+            }
+
+            console.log(`⚙️ [BACNET] Using Legacy Driver Config -> Port: ${bacnetPort} (0x${bacnetPort.toString(16).toUpperCase()}), Interface: ${bacnetInterface}`)
+          } else {
+            console.warn('⚠️ No BACnet Network or Driver config found, using defaults')
+          }
         }
 
       } catch (dbError) {
-        console.error('⚠️ Failed to load driver config from DB:', dbError)
+        console.error('⚠️ Failed to load config from DB:', dbError)
       }
 
       // Resolve Interface Details
@@ -211,9 +232,9 @@ export const bacnetService = {
       // URL Pattern ตาม C# Swagger
       const url = `/ReadWrite/devices/${req.deviceId}/objects/${req.objectType}/${req.instance}/properties/${req.propertyId}`
 
-      console.log(`📝 [BACNET DEBUG] URL: ${url}`)
-      console.log(`📝 [BACNET DEBUG] Body:`, JSON.stringify({ value: req.value }))
-      console.log(`📝 [BACNET DEBUG] Value Type: ${typeof req.value}`)
+      console.log(` [BACNET DEBUG] URL: ${url}`)
+      console.log(` [BACNET DEBUG] Body:`, JSON.stringify({ value: req.value }))
+      console.log(` [BACNET DEBUG] Value Type: ${typeof req.value}`)
 
       // ส่ง Body ไปให้ C# (C# จะไปจัดการ Type conversion เองตามที่เราแก้ไว้แล้ว)
       // [FIX] User supplied example has NO priority and uses raw value.

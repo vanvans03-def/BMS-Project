@@ -2,6 +2,13 @@ import { sql } from '../db'
 import { auditLogService } from './audit-log.service'
 import type { SystemSettings } from '../dtos/setting.dto'
 
+export interface NetworkInterfaceDetail {
+  name: string
+  ip: string
+  mac: string
+  type: string
+}
+
 export const settingsService = {
   async getSettings(): Promise<SystemSettings> {
     try {
@@ -25,11 +32,40 @@ export const settingsService = {
     }
   },
 
-  async getNetworkInterfaces(): Promise<string[]> {
+  async getNetworkInterfaces(): Promise<NetworkInterfaceDetail[]> {
     try {
       const os = await import('os')
       const interfaces = os.networkInterfaces()
-      return Object.keys(interfaces)
+      const results: NetworkInterfaceDetail[] = []
+
+      for (const name of Object.keys(interfaces)) {
+        const ifaces = interfaces[name]
+        if (ifaces) {
+          // Find IPv4 address
+          const ipv4 = ifaces.find(iface => iface.family === 'IPv4' && !iface.internal)
+          if (ipv4) {
+            results.push({
+              name,
+              ip: ipv4.address,
+              mac: ipv4.mac,
+              type: 'IPv4'
+            })
+          } else {
+            // If no IPv4, use first available (including loopback)
+            const first = ifaces[0]
+            if (first) {
+              results.push({
+                name,
+                ip: first.address,
+                mac: first.mac,
+                type: first.family
+              })
+            }
+          }
+        }
+      }
+
+      return results
     } catch (error) {
       console.error('❌ Get Network Interfaces Failed:', error)
       return []

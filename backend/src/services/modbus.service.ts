@@ -1,6 +1,7 @@
 import ModbusRTU from 'modbus-serial'
 import { sql } from '../db'
 import { settingsService } from './settings.service'
+import { configService } from './config.service'
 
 // Interface for Connection Parameters
 export interface ConnectionParams {

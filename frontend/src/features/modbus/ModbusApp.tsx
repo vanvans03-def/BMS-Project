@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 /* eslint-disable no-empty */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -7,7 +8,7 @@ import {
   ReloadOutlined, PlusOutlined, DatabaseOutlined,
   HddOutlined, ThunderboltOutlined, ArrowLeftOutlined,
   GlobalOutlined, ApiOutlined, SaveOutlined, FileTextOutlined,
-  LineChartOutlined
+  LineChartOutlined, SettingOutlined
 } from '@ant-design/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import AOS from 'aos'
@@ -17,6 +18,7 @@ import { DashboardLayout } from '../../components/layout/DashboardLayout'
 import { ModbusDeviceTable } from './ModbusDeviceTable'
 import { ModbusGatewayTable } from './ModbusGatewayTable'
 import { ModbusPointTable } from './ModbusPointTable'
+import { ModbusNetworksManager } from './ModbusNetworksManager'
 import { WriteValueModal } from '../../components/WriteValueModal'
 import { GeneralSettings, DatabaseSettings } from '../../components/SettingsTabs'
 import { LogsPage } from '../../components/LogsPage'
@@ -509,6 +511,7 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
     }
     return [
       { key: "dashboard", icon: <DatabaseOutlined />, label: "Dashboard" },
+      { key: "settings", icon: <SettingOutlined />, label: "Settings" },
       { key: "history-graph", icon: <LineChartOutlined />, label: "History Graph" },
       { key: "history-logs", icon: <FileTextOutlined />, label: "History Logs" },
       { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" },
@@ -536,7 +539,7 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
       headerIcon={<HddOutlined />}
       themeColor="#faad14"
       onBack={
-        ['dashboard', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined
+        ['dashboard', 'settings', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined
       }
       currentView={currentView === 'points' ? 'detail' : (currentView === 'gateway' ? 'gateway' : currentView)}
 
@@ -554,6 +557,8 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
       {/* Level 1 Views */}
       {currentView === 'dashboard' && renderDashboard()}
       {currentView === 'gateway' && renderGateway()}
+
+      {currentView === 'settings' && <ModbusNetworksManager />}
 
       {currentView === 'history-graph' && (
         <Card title="Global History Graph" style={{ height: '100%' }}>

@@ -1,14 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useMemo, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Button, Input, Space, Typography, Card, message, Badge, Row, Col, Divider, Tabs, Modal, Form, InputNumber } from "antd"
+import { Button, Input, Space, Typography, Card, message, Badge, Row, Col, Divider, Modal, Form, InputNumber } from "antd"
 import {
   SearchOutlined, ReloadOutlined, PlusOutlined, DatabaseOutlined,
-  WifiOutlined, ArrowLeftOutlined, SyncOutlined, GlobalOutlined,
-  ApiOutlined,
+  WifiOutlined, ArrowLeftOutlined, SyncOutlined, SettingOutlined,
   FileTextOutlined,
-  LineChartOutlined,
-  SettingOutlined
+  LineChartOutlined
 } from "@ant-design/icons"
 import AOS from 'aos'
 
@@ -20,12 +18,14 @@ import { PointTable } from "./PointTable"
 import { DiscoveryModal } from "./DiscoveryModal"
 import { DeviceStatsCards, PointStatsCards } from "../../components/StatsCards"
 import { WriteValueModal } from "../../components/WriteValueModal"
-import { GeneralSettings, NetworkSettings, DatabaseSettings } from "../../components/SettingsTabs"
 import { LogsPage } from "../../components/LogsPage"
 import { ProfileModal } from "../../components/ProfileModal"
+import { DeviceConfigurationModal } from '../shared/DeviceConfigurationModal'
+// import { PointConfigurationModal } from '../shared/PointConfigurationModal' // [TODO] Will be used for point config
 import HistoryGraphPanel from "../central_logs/HistoryGraphPanel"
 import HistoryLogsPanel from "../central_logs/HistoryLogsPanel"
 import { ConfigurationModal } from "./ConfigurationModal"
+import { BACnetGatewayManager } from "./BACnetGatewayManager"
 
 import type { Device, Point, PointValue } from "../../types/common"
 
@@ -39,6 +39,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
   const [searchText, setSearchText] = useState("")
   const [messageApi, contextHolder] = message.useMessage()
 
+  const [selectedGateway, setSelectedGateway] = useState<any>(null)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const [pointValues, setPointValues] = useState<Map<number, PointValue>>(new Map())
 
@@ -73,7 +74,16 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
   const [isMonitoring, setIsMonitoring] = useState(false)
   const [historyPoint, setHistoryPoint] = useState<Point | null>(null)
 
-  useEffect(() => { AOS.refresh() }, [currentView, selectedDevice])
+  // [NEW] Device & Point Configuration Modals
+  const [deviceConfigModalOpen, setDeviceConfigModalOpen] = useState(false)
+  const [selectedDeviceForConfig, setSelectedDeviceForConfig] = useState<number | null>(null)
+  const [selectedDeviceForConfigName, setSelectedDeviceForConfigName] = useState('')
+  // [TODO] Point config modal states - will use when implementing point configuration
+  // const [pointConfigModalOpen, setPointConfigModalOpen] = useState(false)
+  // const [selectedPointForConfig, setSelectedPointForConfig] = useState<number | null>(null)
+  // const [selectedPointForConfigName, setSelectedPointForConfigName] = useState('')
+
+  useEffect(() => { AOS.refresh() }, [currentView, selectedGateway, selectedDevice])
 
   const { data: settings } = useQuery({
     queryKey: ["settings"],
@@ -148,7 +158,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     return new Set(devices.map(d => d.device_instance_id).filter((id): id is number => id !== undefined))
   }, [devices])
 
-  const handleMenuClick = (key: string) => { setCurrentView(key); if (key === 'dashboard') setSelectedDevice(null); }
+  const handleMenuClick = (key: string) => { setCurrentView(key); if (key === 'dashboard') { setSelectedGateway(null); setSelectedDevice(null); } }
 
   const [scanningPort, setScanningPort] = useState<number | undefined>(undefined) // [NEW]
 
@@ -214,51 +224,94 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     try { await authFetch('/points/write', { method: "POST", body: JSON.stringify({ deviceId: selectedDevice.id, pointId: writingPoint.id, value: writingPoint.object_type.includes("ANALOG") ? Number(writeValue) : (writeValue === 'active' || writeValue === 1 ? 1 : 0), priority: writePriority }) }); messageApi.success("Command Sent"); setIsWriteModalOpen(false); setTimeout(refetchPoints, 1000) } catch { messageApi.error("Write Failed") } finally { setIsWriting(false) }
   }
 
-  const renderDashboard = () => (
-    <>
-      <div style={{ marginBottom: 24 }} data-aos="fade-down">
-        <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} md={12}><Title level={3} style={{ margin: 0 }}>Device Manager</Title><Text type="secondary">Manage BACnet devices</Text></Col>
-          <Col xs={24} md={12} style={{ textAlign: "right" }}>
-            <Space>
-              <Input prefix={<SearchOutlined />} placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: 200 }} />
-              <Button icon={<ReloadOutlined />} onClick={() => refetchDevices()}>Refresh</Button>
-
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleScan}>Discovery</Button>
-            </Space>
-          </Col>
-        </Row>
-      </div>
-      <div data-aos="fade-up"><DeviceStatsCards total={devices?.length || 0} online={devices?.length || 0} offline={0} /></div>
-      <div data-aos="fade-up" data-aos-delay="200">
-        <Card>
-          <DeviceTable
-            devices={devices || []}
-            loading={isLoadingDevices}
-            defaultPollingInterval={globalPollingInterval} // [NEW] Pass default
-            onViewDevice={(d) => { setSelectedDevice(d); setCurrentView("detail") }}
-            searchText={searchText}
-            onEditDevice={(d) => {
-              setDeviceToEdit(d);
-              formEditPolling.setFieldsValue({
-                pollingInterval: d.polling_interval
-              });
-              setIsEditPollingOpen(true);
-            }}
-            onConfigDevice={(d) => {
-              setConfigModal({
-                open: true,
-                type: 'DEVICE',
-                targetId: d.id,
-                initialConfig: d.config, // Ensure backend returns 'config'
-                title: `Device Config: ${d.device_name}`
-              })
+  const renderDashboard = () => {
+    // If no gateway selected, show gateway manager
+    if (!selectedGateway) {
+      return (
+        <Card title="BACnet Gateway Manager" data-aos="fade-up">
+          <BACnetGatewayManager 
+            onSelectGateway={(gateway) => {
+              setSelectedGateway(gateway);
             }}
           />
         </Card>
-      </div>
-    </>
-  )
+      );
+    }
+
+    // If gateway selected, show devices for that gateway
+    return (
+      <>
+        <div style={{ marginBottom: 24 }} data-aos="fade-down">
+          <Row gutter={[16, 16]} align="middle">
+            <Col xs={24} md={12}>
+              <Title level={3} style={{ margin: 0 }}>
+                {(selectedGateway as any)?.name || 'Gateway'} - Devices
+              </Title>
+              <Text type="secondary">Manage devices on this gateway</Text>
+            </Col>
+            <Col xs={24} md={12} style={{ textAlign: "right" }}>
+              <Space>
+                <Button 
+                  onClick={() => {
+                    setSelectedGateway(null);
+                  }}
+                >
+                  Back to Gateways
+                </Button>
+                <Input prefix={<SearchOutlined />} placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: 200 }} />
+                <Button icon={<ReloadOutlined />} onClick={() => refetchDevices()}>Refresh</Button>
+                <Button type="primary" icon={<PlusOutlined />} onClick={handleScan}>Discovery</Button>
+              </Space>
+            </Col>
+          </Row>
+        </div>
+        <div data-aos="fade-up"><DeviceStatsCards total={devices?.length || 0} online={devices?.length || 0} offline={0} /></div>
+        <div data-aos="fade-up" data-aos-delay="200">
+          <Card>
+            <DeviceTable
+              devices={devices || []}
+              loading={isLoadingDevices}
+              defaultPollingInterval={globalPollingInterval}
+              onViewDevice={(d) => { setSelectedDevice(d); setCurrentView("detail") }}
+              searchText={searchText}
+              onEditDevice={(d) => {
+                setDeviceToEdit(d);
+                formEditPolling.setFieldsValue({
+                  pollingInterval: d.polling_interval
+                });
+                setIsEditPollingOpen(true);
+              }}
+              onConfigDevice={(d) => {
+                setSelectedDeviceForConfig(d.id);
+                setSelectedDeviceForConfigName(d.device_name);
+                setDeviceConfigModalOpen(true);
+              }}
+            />
+          </Card>
+        </div>
+
+        {/* Device Configuration Modal */}
+        <DeviceConfigurationModal
+          open={deviceConfigModalOpen}
+          onClose={() => {
+            setDeviceConfigModalOpen(false);
+            setSelectedDeviceForConfig(null);
+            setSelectedDeviceForConfigName('');
+          }}
+          onSave={() => {
+            messageApi.success('Device configuration saved');
+            setDeviceConfigModalOpen(false);
+            setSelectedDeviceForConfig(null);
+            setSelectedDeviceForConfigName('');
+            refetchDevices();
+          }}
+          deviceId={selectedDeviceForConfig}
+          deviceName={selectedDeviceForConfigName}
+          protocol="BACNET"
+        />
+      </>
+    );
+  }
 
   const renderDetail = () => (
     <>
@@ -315,19 +368,25 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
   const menuItems = useMemo(() => {
     if (selectedDevice && currentView !== "loading") {
       return [
-        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to List" },
+        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to Gateway" },
         // { type: "divider" },
         // { key: "points", icon: <ApiOutlined />, label: "Points" },
         // History Graph removed from here
       ]
     }
+    if (selectedGateway && currentView === "dashboard") {
+      return [
+        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to Gateways" },
+      ]
+    }
     return [
       { key: "dashboard", icon: <DatabaseOutlined />, label: "Dashboard" },
+      { key: "settings", icon: <SettingOutlined />, label: "Settings" },
       { key: "history-graph", icon: <LineChartOutlined />, label: "History Graph" }, // [NEW] Moved to Top Level
       { key: "history-logs", icon: <FileTextOutlined />, label: "History Logs" }, // [NEW] Added
       { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" }, // Renamed for clarity
     ]
-  }, [selectedDevice, currentView])
+  }, [selectedDevice, selectedGateway, currentView])
 
   // [NEW] Loading State Render
   if (currentView === 'loading') {
@@ -351,7 +410,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       title="BACnet Protocol"
       headerIcon={<DatabaseOutlined />}
       themeColor="#1890ff"
-      onBack={['dashboard', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined}
+      onBack={['dashboard', 'settings', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined}
       currentView={currentView === 'points' ? 'points' : currentView}
       onMenuClick={handleMenuClick}
       menuItems={menuItems as any}
@@ -384,12 +443,8 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
 
       {/* ... Settings ... */}
       {currentView === 'settings' && (
-        <Card title="System Settings">
-          <Tabs items={[
-            { key: 'general', label: <span><GlobalOutlined /> General</span>, children: <GeneralSettings /> },
-            { key: 'network', label: <span><ApiOutlined /> Network</span>, children: <NetworkSettings /> },
-            { key: 'database', label: <span><DatabaseOutlined /> Database</span>, children: <DatabaseSettings filterProtocol="BACNET" /> },
-          ]} />
+        <Card title="BACnet Gateway Management">
+          <BACnetGatewayManager />
         </Card>
       )}
 
@@ -406,7 +461,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       <WriteValueModal open={isWriteModalOpen} point={writingPoint} currentValue={pointValues.get(writingPoint?.id || 0)?.value} writeValue={writeValue} priority={writePriority} loading={isWriting} onClose={() => setIsWriteModalOpen(false)} onWrite={handleWrite} onValueChange={setWriteValue} onPriorityChange={setWritePriority} />
       <ProfileModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
 
-      <Modal title={null} open={historyPoint !== null} onCancel={() => setHistoryPoint(null)} footer={null} width={1000} styles={{ body: { padding: 0 } }} destroyOnClose>
+      <Modal title={null} open={historyPoint !== null} onCancel={() => setHistoryPoint(null)} footer={null} width={1000} styles={{ body: { padding: 0 } }}>
         {historyPoint && selectedDevice && (<HistoryGraphPanel initialSelection={[{ deviceName: selectedDevice.device_name, pointName: historyPoint.point_name }]} />)}
       </Modal>
 

@@ -54,12 +54,56 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
       if (driver) {
         setConfigModal({
           open: true,
-          type: 'DRIVER', // Using DRIVER type for global settings
+          type: 'DRIVER',
           targetId: driver.id,
           initialConfig: driver.config,
           title: `${protocol} Driver Configuration`
         })
       } else {
+        // [NEW] Auto-create if MODBUS driver missing
+        if (protocol === 'MODBUS') {
+          try {
+            messageApi.loading('Creating Modbus Driver...', 0.5)
+            const createRes = await authFetch('/devices', {
+              method: 'POST',
+              body: JSON.stringify([{
+                device_name: 'Modbus Driver',
+                device_instance_id: 99999, // Arbitrary ID for driver
+                device_type: 'DRIVER',
+                protocol: 'MODBUS',
+                network_number: 0,
+                ip_address: '127.0.0.1', // Virtual
+                config: {
+                  pollingInterval: 3000,
+                  timeout: 1000,
+                  retries: 3
+                }
+              }])
+            })
+
+            if (createRes.ok) {
+              // Fetch again to get the ID
+              const retryRes = await authFetch('/devices')
+              const retryDevices = await retryRes.json()
+              const newDriver = retryDevices.find((d: any) => d.device_type === 'DRIVER' && d.protocol === 'MODBUS')
+
+              if (newDriver) {
+                setConfigModal({
+                  open: true,
+                  type: 'DRIVER',
+                  targetId: newDriver.id,
+                  initialConfig: newDriver.config,
+                  title: `Modbus Driver Configuration`
+                })
+                messageApi.success('Modbus Driver Initialized')
+                return
+              }
+            }
+          } catch (e) {
+            console.error('Failed to create driver', e)
+          }
+        }
+
         messageApi.warning(`No ${protocol} Driver found.`)
       }
     } catch (err) {
@@ -205,6 +249,7 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
           targetId={configModal.targetId}
           initialConfig={configModal.initialConfig}
           title={configModal.title}
+          protocol={configModal.title?.includes('BACNET') ? 'BACNET' : (configModal.title?.includes('MODBUS') ? 'MODBUS' : undefined)}
         />
       </div >
 

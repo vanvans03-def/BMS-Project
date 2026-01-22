@@ -1,8 +1,8 @@
-import { Modal, Form, Input, InputNumber, Select, Tabs, Button, Space, Typography, Row, Col, message } from 'antd'
+import { Modal, Form, Input, InputNumber, Select, Button, Space, Typography, Row, Col, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { authFetch } from '../../utils/authFetch'
 
-const { Text, Title } = Typography
+const { Title } = Typography
 const { Option } = Select
 const { TextArea } = Input
 
@@ -14,9 +14,10 @@ interface ConfigurationModalProps {
     targetId: number | null
     initialConfig: any
     title?: string
+    protocol?: string // [NEW] To distinguish driver type
 }
 
-export const ConfigurationModal = ({ open, onClose, onSave, type, targetId, initialConfig, title }: ConfigurationModalProps) => {
+export const ConfigurationModal = ({ open, onClose, onSave, type, targetId, initialConfig, title, protocol }: ConfigurationModalProps) => {
     const [form] = Form.useForm()
     const [mode, setMode] = useState<'form' | 'json'>('form')
     const [loading, setLoading] = useState(false)
@@ -184,6 +185,37 @@ export const ConfigurationModal = ({ open, onClose, onSave, type, targetId, init
         </>
     )
 
+    // [NEW] Modbus Driver Form
+    const renderModbusDriverForm = () => (
+        <>
+            <Title level={5}>Modbus Communication</Title>
+            <Row gutter={16}>
+                <Col span={12}>
+                    <Form.Item name="pollingInterval" label="Default Polling (ms)" rules={[{ required: true }]}>
+                        <InputNumber style={{ width: '100%' }} min={100} step={100} />
+                    </Form.Item>
+                </Col>
+                <Col span={12}>
+                    <Form.Item name="timeout" label="Default Timeout (ms)" rules={[{ required: true }]}>
+                        <InputNumber style={{ width: '100%' }} min={100} step={100} />
+                    </Form.Item>
+                </Col>
+            </Row>
+            <Row gutter={16}>
+                <Col span={12}>
+                    <Form.Item name="retries" label="Max Retries">
+                        <InputNumber style={{ width: '100%' }} min={0} max={10} />
+                    </Form.Item>
+                </Col>
+                <Col span={12}>
+                    <Form.Item name="maxConcurrent" label="Max Concurrent Requests">
+                        <InputNumber style={{ width: '100%' }} min={1} max={50} />
+                    </Form.Item>
+                </Col>
+            </Row>
+        </>
+    )
+
     const renderDeviceForm = () => (
         <>
             <Row gutter={16}>
@@ -314,7 +346,7 @@ export const ConfigurationModal = ({ open, onClose, onSave, type, targetId, init
 
             {mode === 'form' ? (
                 <Form form={form} layout="vertical">
-                    {type === 'DRIVER' && renderDriverForm()}
+                    {type === 'DRIVER' && (protocol === 'MODBUS' ? renderModbusDriverForm() : renderDriverForm())}
                     {type === 'DEVICE' && renderDeviceForm()}
                     {type === 'POINT' && renderPointForm()}
                 </Form>
