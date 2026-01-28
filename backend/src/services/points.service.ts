@@ -116,23 +116,38 @@ class PointsService {
   async addPointsToHierarchy(deviceId: number, pointIds: number[]) {
     if (!pointIds || pointIds.length === 0) return { success: false, message: 'No points selected' }
 
-    // 1. Get Device & Gateway Info
-    // We need to fetch via join to get network (gateway) info if possible, 
-    // OR we just use the device info + network_config linkage
+    // 1. Get Device Info & Try to Find Gateway Name
+    // For BACnet: via network_config
+    // For Modbus: via parent_id (Gateway Device)
     const devices = await sql`
-        SELECT d.*, dc.network_config_id, nc.name as gateway_name 
+        SELECT 
+            d.*, 
+            dc.network_config_id, 
+            nc.name as network_name,
+            parent.device_name as parent_device_name
         FROM devices d
         LEFT JOIN device_config dc ON d.id = dc.device_id
         LEFT JOIN network_config nc ON dc.network_config_id = nc.id
+        LEFT JOIN devices parent ON d.parent_id = parent.id
         WHERE d.id = ${deviceId}
       `
+
     if (devices.length === 0) throw new Error('Device not found')
     const device = devices[0]!
-    const gatewayName = device.gateway_name || `Gateway_${device.network_config_id || 'Unknown'}`
+
+    // [UPDATED] Determine Gateway Name (Folder Name)
+    let gatewayName = 'Unknown Gateway'
+
+    if (device.network_name) {
+      gatewayName = device.network_name // BACnet typical
+    } else if (device.parent_device_name) {
+      gatewayName = device.parent_device_name // Modbus typical (Gateway is the parent device)
+    } else {
+      // Fallback or Standalone
+      gatewayName = `Network_${device.protocol}`
+    }
 
     // 2. Ensure Gateway Folder exists
-    // We assume "Gateway Folder" is a Location of type 'Folder' with name = Gateway Name
-    // Logic: Search for location with this name. If not found, create.
     let [gatewayLoc] = await sql`SELECT id FROM locations WHERE name = ${gatewayName} AND type = 'Folder' LIMIT 1`
 
     if (!gatewayLoc) {

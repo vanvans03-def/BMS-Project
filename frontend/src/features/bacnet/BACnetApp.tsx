@@ -33,9 +33,14 @@ import type { Device, Point, PointValue } from "../../types/common"
 
 const { Title, Text } = Typography
 
-interface BACnetAppProps { onBack: () => void; initialDeviceId?: number | null; initialView?: string }
+interface BACnetAppProps {
+  onBack: () => void;
+  initialDeviceId?: number | null;
+  initialView?: string;
+  onNavigate?: (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => void;
+}
 
-export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACnetAppProps) {
+export default function BACnetApp({ onBack, initialDeviceId, initialView, onNavigate }: BACnetAppProps) {
   // [MODIFIED] Start in 'loading' state if we have a target device
   const [currentView, setCurrentView] = useState<string>(initialDeviceId ? "loading" : (initialView || "dashboard"))
   const [searchText, setSearchText] = useState("")
@@ -107,7 +112,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     refetchInterval: 10000,
   })
 
-  // [NEW] Auto-select device from navigation
+  // [REF] Navigation Logic Update
   useEffect(() => {
     if (initialDeviceId && devices) {
       if (!selectedDevice) {
@@ -115,6 +120,14 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
         if (target) {
           setSelectedDevice(target)
           setCurrentView('detail')
+          // [FIX] Ensure parent gateway is selected if possible (for context)
+          if ((target as any).network_config_id) {
+            const netId = (target as any).network_config_id
+            // Shallow object for immediate context
+            setSelectedGateway({ id: netId, name: 'Gateway', enable: true })
+            // Fetch real
+            authFetch(`/config/networks/${netId}`).then(r => r.json()).then(g => setSelectedGateway(g)).catch(() => { })
+          }
         } else if (!isLoadingDevices) {
           messageApi.error("Device not found")
           setCurrentView('dashboard')
@@ -122,27 +135,6 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       }
     }
   }, [devices, initialDeviceId, isLoadingDevices])
-
-  // [FIX] Restore selectedGateway if we have a device but no gateway (e.g. deep link / refresh)
-  useEffect(() => {
-    if (selectedDevice && !selectedGateway && devices) {
-      const networkId = (selectedDevice as any).network_config_id
-      if (networkId) {
-        // [OPTIMIZATION] Set a temporary gateway object immediately to ensure 'Back' button works 
-        // without waiting for the async fetch loop.
-        // This prevents the race condition where user clicks Back before fetch completes.
-        setSelectedGateway({ id: networkId, name: 'Loading...', enable: true, config: {} })
-
-        // Then fetch full details to update it
-        authFetch(`/config/networks/${networkId}`)
-          .then(res => res.json())
-          .then(network => {
-            setSelectedGateway(network)
-          })
-          .catch(err => console.error("Failed to restore gateway context", err))
-      }
-    }
-  }, [selectedDevice, selectedGateway, devices])
 
   const { data: points, isLoading: isLoadingPoints, refetch: refetchPoints } = useQuery<Point[]>({
     queryKey: ["points", selectedDevice?.id],
@@ -185,7 +177,11 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     return new Set(devices.map(d => d.device_instance_id).filter((id): id is number => id !== undefined))
   }, [devices])
 
-  const handleMenuClick = (key: string) => { setCurrentView(key); if (key === 'dashboard') { setSelectedGateway(null); setSelectedDevice(null); } }
+  const handleMenuClick = (key: string) => {
+    setCurrentView(key);
+    if (key === 'dashboard') { setSelectedGateway(null); setSelectedDevice(null); }
+    if (key === 'gateway') { setSelectedDevice(null); }
+  }
 
   const [scanningPort, setScanningPort] = useState<number | undefined>(undefined) // [NEW]
 
@@ -303,96 +299,93 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     }
   }
 
-  const renderDashboard = () => {
-    // If no gateway selected, show gateway manager
-    if (!selectedGateway) {
-      return (
-        <Card title="BACnet Gateway Manager" data-aos="fade-up">
-          <BACnetGatewayManager
-            onSelectGateway={(gateway) => {
-              setSelectedGateway(gateway);
+  // RENDER: Dashboard (Root - Gateway Manager)
+  const renderDashboard = () => (
+    <Card title="BACnet Gateway Manager" data-aos="fade-up">
+      <BACnetGatewayManager
+        onSelectGateway={(gateway) => {
+          setSelectedGateway(gateway);
+          setCurrentView('gateway'); // [FIX] Go to gateway view
+        }}
+      />
+    </Card>
+  )
+
+  // RENDER: Gateway (Device List)
+  const renderGateway = () => (
+    <>
+      <div style={{ marginBottom: 24 }} data-aos="fade-down">
+        <Row gutter={[16, 16]} align="middle">
+          <Col xs={24} md={12}>
+            <Title level={3} style={{ margin: 0 }}>
+              {(selectedGateway as any)?.name || 'Gateway'} - Devices
+            </Title>
+            <Text type="secondary">Manage devices on this gateway</Text>
+          </Col>
+          <Col xs={24} md={12} style={{ textAlign: "right" }}>
+            <Space>
+              <Button
+                onClick={() => {
+                  setSelectedGateway(null);
+                  setCurrentView('dashboard');
+                }}
+              >
+                Back to Gateways
+              </Button>
+              <Input prefix={<SearchOutlined />} placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: 200 }} />
+              <Button icon={<ReloadOutlined />} onClick={() => refetchDevices()}>Refresh</Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleScan}>Discovery</Button>
+            </Space>
+          </Col>
+        </Row>
+      </div>
+      <div data-aos="fade-up"><DeviceStatsCards total={devices?.length || 0} online={devices?.length || 0} offline={0} /></div>
+      <div data-aos="fade-up" data-aos-delay="200">
+        <Card>
+          <DeviceTable
+            devices={(devices || []).filter(d =>
+              !selectedGateway || (d as any).network_config_id === selectedGateway.id
+            )}
+            loading={isLoadingDevices}
+            defaultPollingInterval={globalPollingInterval}
+            onViewDevice={(d) => { setSelectedDevice(d); setCurrentView("detail") }}
+            searchText={searchText}
+            onEditDevice={(d) => {
+              setDeviceToEdit(d);
+              formEditPolling.setFieldsValue({
+                pollingInterval: d.polling_interval
+              });
+              setIsEditPollingOpen(true);
+            }}
+            onConfigDevice={(d) => {
+              setSelectedDeviceForConfig(d.id);
+              setSelectedDeviceForConfigName(d.device_name);
+              setDeviceConfigModalOpen(true);
             }}
           />
         </Card>
-      );
-    }
+      </div>
 
-    // If gateway selected, show devices for that gateway
-    return (
-      <>
-        <div style={{ marginBottom: 24 }} data-aos="fade-down">
-          <Row gutter={[16, 16]} align="middle">
-            <Col xs={24} md={12}>
-              <Title level={3} style={{ margin: 0 }}>
-                {(selectedGateway as any)?.name || 'Gateway'} - Devices
-              </Title>
-              <Text type="secondary">Manage devices on this gateway</Text>
-            </Col>
-            <Col xs={24} md={12} style={{ textAlign: "right" }}>
-              <Space>
-                <Button
-                  onClick={() => {
-                    setSelectedGateway(null);
-                  }}
-                >
-                  Back to Gateways
-                </Button>
-                <Input prefix={<SearchOutlined />} placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: 200 }} />
-                <Button icon={<ReloadOutlined />} onClick={() => refetchDevices()}>Refresh</Button>
-                <Button type="primary" icon={<PlusOutlined />} onClick={handleScan}>Discovery</Button>
-              </Space>
-            </Col>
-          </Row>
-        </div>
-        <div data-aos="fade-up"><DeviceStatsCards total={devices?.length || 0} online={devices?.length || 0} offline={0} /></div>
-        <div data-aos="fade-up" data-aos-delay="200">
-          <Card>
-            <DeviceTable
-              devices={(devices || []).filter(d =>
-                !selectedGateway || (d as any).network_config_id === selectedGateway.id
-              )}
-              loading={isLoadingDevices}
-              defaultPollingInterval={globalPollingInterval}
-              onViewDevice={(d) => { setSelectedDevice(d); setCurrentView("detail") }}
-              searchText={searchText}
-              onEditDevice={(d) => {
-                setDeviceToEdit(d);
-                formEditPolling.setFieldsValue({
-                  pollingInterval: d.polling_interval
-                });
-                setIsEditPollingOpen(true);
-              }}
-              onConfigDevice={(d) => {
-                setSelectedDeviceForConfig(d.id);
-                setSelectedDeviceForConfigName(d.device_name);
-                setDeviceConfigModalOpen(true);
-              }}
-            />
-          </Card>
-        </div>
-
-        {/* Device Configuration Modal */}
-        <DeviceConfigurationModal
-          open={deviceConfigModalOpen}
-          onClose={() => {
-            setDeviceConfigModalOpen(false);
-            setSelectedDeviceForConfig(null);
-            setSelectedDeviceForConfigName('');
-          }}
-          onSave={() => {
-            messageApi.success('Device configuration saved');
-            setDeviceConfigModalOpen(false);
-            setSelectedDeviceForConfig(null);
-            setSelectedDeviceForConfigName('');
-            refetchDevices();
-          }}
-          deviceId={selectedDeviceForConfig}
-          deviceName={selectedDeviceForConfigName}
-          protocol="BACNET"
-        />
-      </>
-    );
-  }
+      <DeviceConfigurationModal
+        open={deviceConfigModalOpen}
+        onClose={() => {
+          setDeviceConfigModalOpen(false);
+          setSelectedDeviceForConfig(null);
+          setSelectedDeviceForConfigName('');
+        }}
+        onSave={() => {
+          messageApi.success('Device configuration saved');
+          setDeviceConfigModalOpen(false);
+          setSelectedDeviceForConfig(null);
+          setSelectedDeviceForConfigName('');
+          refetchDevices();
+        }}
+        deviceId={selectedDeviceForConfig}
+        deviceName={selectedDeviceForConfigName}
+        protocol="BACNET"
+      />
+    </>
+  )
 
   const renderDetail = () => (
     <>
@@ -448,6 +441,17 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
             onDragStart={(e, point) => {
               e.dataTransfer.setData('pointId', String(point.id))
             }}
+            // [NEW] Staged Selection Sync
+            selectedPointIds={stagedPoints.map(p => p.id)}
+            onSelectionChange={(selectedIds) => {
+              // Logic: Merge current staged points (excluding current device) + new selected points
+              setStagedPoints(prev => {
+                const currentDeviceIds = new Set((points || []).map(p => p.id))
+                const otherDevicePoints = prev.filter(p => !currentDeviceIds.has(p.id))
+                const newCurrentPoints = (points || []).filter(p => selectedIds.includes(p.id))
+                return [...otherDevicePoints, ...newCurrentPoints]
+              })
+            }}
           />
         </Card>
       </div>
@@ -483,25 +487,25 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
 
   // Dynamic Menu
   const menuItems = useMemo(() => {
-    if (selectedDevice && currentView !== "loading") {
+    // 1. Detail View: Back to Gateway
+    if (selectedDevice && currentView === 'detail') {
       return [
-        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to Devices" },
-        // { type: "divider" },
-        // { key: "points", icon: <ApiOutlined />, label: "Points" },
-        // History Graph removed from here
+        { key: "gateway", icon: <ArrowLeftOutlined />, label: "Back to Devices" },
+        // Can add related point views here if needed
       ]
     }
-    if (selectedGateway && currentView === "dashboard") {
+    // 2. Gateway View (Device List): Back to Dashboard
+    if (selectedGateway && currentView === "gateway") {
       return [
         { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to Gateways" },
       ]
     }
+    // 3. Root View
     return [
       { key: "dashboard", icon: <DatabaseOutlined />, label: "Dashboard" },
-      { key: "settings", icon: <SettingOutlined />, label: "Settings" },
-      { key: "history-graph", icon: <LineChartOutlined />, label: "History Graph" }, // [NEW] Moved to Top Level
-      { key: "history-logs", icon: <FileTextOutlined />, label: "History Logs" }, // [NEW] Added
-      { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" }, // Renamed for clarity
+      { key: "history-graph", icon: <LineChartOutlined />, label: "History Graph" },
+      { key: "history-logs", icon: <FileTextOutlined />, label: "History Logs" },
+      { key: "logs", icon: <DatabaseOutlined />, label: "Audit Logs" },
     ]
   }, [selectedDevice, selectedGateway, currentView])
 
@@ -527,15 +531,14 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     // 1. Points View -> Device List (Detail -> Dashboard with selectedGateway)
     if (currentView === 'detail' || currentView === 'points') {
       setSelectedDevice(null)
-      // Explicitly set view to dashboard. 
-      // We do NOT clear selectedGateway here, so it should render the Device List for that gateway.
-      setCurrentView('dashboard')
+      setCurrentView('gateway') // Go back to device list
       return
     }
 
     // 2. Device List (Gateway View) -> Gateway List
-    if (currentView === 'dashboard' && selectedGateway) {
+    if (currentView === 'gateway') {
       setSelectedGateway(null)
+      setCurrentView('dashboard') // Go back to root
       return
     }
 
@@ -548,24 +551,30 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       title="BACnet Protocol"
       headerIcon={<DatabaseOutlined />}
       themeColor="#1890ff"
-      // Change: Always show back button if we are deep in hierarchy OR if parent allows it
+      // Use onBack only for top-level pages basically, OR if we rely on internal back
+      // Actually, if we use handleInternalBack, we can wire it up for detail/gateway views too.
+      // But typically DashboardLayout's onBack implies "Exit App" (Portal home).
+      // We only want that on Dashboard/Logs/Settings.
+      // Sub-views should behave like they are INSIDE the app, managed by menu/actions, 
+      // UNLESS the user explicitly wants a "Back" in the header to go up.
+      // ModbusApp shows NO back button in header for sub-views, relying on Sidebar/Menu "Back".
+      // Let's mimic that.
       onBack={
-        (currentView === 'detail' || currentView === 'points') ||
-          (currentView === 'dashboard' && selectedGateway) ||
-          // Check if we are in other top-level views that support back
-          ['settings', 'history-graph', 'history-logs', 'logs'].includes(currentView)
-          ? handleInternalBack
+        ['dashboard', 'settings', 'history-graph', 'history-logs', 'logs'].includes(currentView)
+          ? onBack
           : undefined
       }
       currentView={currentView === 'points' ? 'points' : currentView}
       onMenuClick={handleMenuClick}
       menuItems={menuItems as any}
       headerActions={null}
+      onSystemSelect={onNavigate}
     >
       {contextHolder}
 
       {/* Level 1 Views */}
       {currentView === 'dashboard' && renderDashboard()}
+      {currentView === 'gateway' && renderGateway()}
       {currentView === 'logs' && <LogsPage defaultProtocol="BACNET" />}
 
       {currentView === 'history-graph' && (
@@ -594,6 +603,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
         </Card>
       )}
 
+      {/* ... Modals ... */}
       <DiscoveryModal open={isDiscoveryModalOpen} loading={isScanning} adding={isAdding} devices={discoveredDevices} scanningPort={scanningPort} selectedRows={selectedDiscoveryRows} existingDeviceIds={existingDeviceIds} onClose={() => setIsDiscoveryModalOpen(false)} onAdd={handleAddSelected} onSelectionChange={setSelectedDiscoveryRows} />
 
       <Modal title="Edit Device Configuration" open={isEditPollingOpen} onCancel={() => setIsEditPollingOpen(false)} footer={null} width={400}>

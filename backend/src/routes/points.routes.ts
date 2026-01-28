@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia'
 import { pointsService } from '../services/points.service'
 import { getActorName } from '../utils/auth.utils'
+import { sql } from '../db'
 
 export const pointsRoutes = new Elysia({ prefix: '/points' })
 
@@ -11,6 +12,13 @@ export const pointsRoutes = new Elysia({ prefix: '/points' })
   // [NEW] Get points in hierarchy
   .get('/in-hierarchy', async () => {
     return await pointsService.getPointsInHierarchy()
+  })
+
+  // [NEW] Get points by Location ID (for DeviceConfigPanel)
+  .get('/by-location/:id', async ({ params: { id } }) => {
+    // Assuming you want all points in this location (Device)
+    const result = await sql`SELECT * FROM points WHERE location_id = ${id} ORDER BY id`
+    return Array.from(result)
   })
 
   .post('/sync', async ({ body }) => {

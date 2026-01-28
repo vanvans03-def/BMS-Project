@@ -5,7 +5,6 @@ import AOS from 'aos'
 import { DashboardLayout } from "../../components/layout/DashboardLayout"
 
 import { LocationTreePanel } from "./LocationTreePanel"
-import { UnassignedDevicesPanel } from "./UnassignedDevicesPanel"
 import { DeviceConfigPanel } from "./DeviceConfigPanel"
 
 const { Content, Sider } = Layout
@@ -19,80 +18,56 @@ interface HierarchyAppProps {
 
 export default function HierarchyApp({ onBack, onNavigate, embedded = false }: HierarchyAppProps) {
     const [selectedLocation, setSelectedLocation] = useState<any>(null)
-    const [refreshTrigger, setRefreshTrigger] = useState(0)
-    const [showHistoryOnly, setShowHistoryOnly] = useState(false) // [NEW]
+    const [showHistoryOnly, setShowHistoryOnly] = useState(false)
 
-    const triggerRefresh = () => setRefreshTrigger(prev => prev + 1)
-
-    useEffect(() => {
-        AOS.refresh()
-    }, [selectedLocation])
+    useEffect(() => { AOS.refresh() }, [selectedLocation])
 
     const content = (
-        <Layout style={{ height: embedded ? '100%' : 'calc(100vh - 100px)', padding: 12, background: 'transparent' }}>
+        <Layout style={{ height: embedded ? '100%' : 'calc(100vh - 64px)', padding: 0, background: 'transparent' }}>
             {/* Panel A: Tree */}
             <Sider
-                width={300}
+                width={320}
                 theme="light"
-                style={{ marginRight: 12, borderRadius: 8, overflow: 'hidden' }}
+                style={{ borderRight: '1px solid #f0f0f0', background: '#fff' }}
                 data-aos={embedded ? undefined : "fade-right"}
-                data-aos-delay={embedded ? undefined : "100"}
             >
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text strong>Hierarchy Structure</Text>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text strong>Hierarchy</Text>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>History Only</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>Show History</Text>
                         <Switch size="small" checked={showHistoryOnly} onChange={setShowHistoryOnly} />
                     </div>
                 </div>
                 <LocationTreePanel onSelectLocation={setSelectedLocation} showHistoryOnly={showHistoryOnly} />
             </Sider>
 
-            {/* Center: Config */}
-            <Content style={{ marginRight: 12 }}>
+            {/* Panel B: Content Detail (Device/Point) */}
+            <Content style={{ padding: 24, overflowY: 'auto' }}>
                 <Card
                     key={selectedLocation?.id || 'init'}
                     data-aos={embedded ? undefined : "fade-up"}
-                    style={{ height: '100%', borderRadius: 8, overflowY: 'auto' }}
-                    styles={{ body: { padding: 24 } }}
+                    style={{ minHeight: '100%', borderRadius: 8 }}
+                    bodyStyle={{ padding: 24 }}
                 >
-                    <div style={{ marginBottom: 16 }}>
-                        <Title level={4} style={{ margin: 0 }}>
-                            {selectedLocation ? selectedLocation.name : 'Context Configuration'}
-                        </Title>
-                        <Text type="secondary">Manage history settings and context</Text>
-                    </div>
-                    <Divider style={{ margin: '12px 0' }} />
-                    <DeviceConfigPanel
-                        selectedLocation={selectedLocation}
-                        refreshTrigger={refreshTrigger}
-                        onNavigate={onNavigate}
-                        showHistoryOnly={showHistoryOnly}
-                    />
+                    {!selectedLocation ? (
+                        <div style={{ textAlign: 'center', marginTop: '20%', color: '#ccc' }}>
+                            <ApartmentOutlined style={{ fontSize: 48, marginBottom: 16 }} />
+                            <div>Select a Device or Point from the tree</div>
+                        </div>
+                    ) : (
+                        <DeviceConfigPanel
+                            selectedLocation={selectedLocation}
+                            onNavigate={onNavigate}
+                            showHistoryOnly={showHistoryOnly}
+                            onSelectNode={setSelectedLocation}
+                        />
+                    )}
                 </Card>
             </Content>
-
-            {/* Panel B: Unassigned Pool (Right Sider) */}
-            <Sider
-                width={280}
-                theme="light"
-                style={{ borderRadius: 8, overflow: 'hidden' }}
-                data-aos={embedded ? undefined : "fade-left"}
-                data-aos-delay={embedded ? undefined : "300"}
-            >
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa' }}>
-                    <Text strong>Unassigned Devices</Text>
-                </div>
-                <UnassignedDevicesPanel
-                    selectedLocation={selectedLocation}
-                    onAssignSuccess={triggerRefresh}
-                />
-            </Sider>
         </Layout>
     )
 
     if (embedded) return content
-
     return (
         <DashboardLayout
             title="Hierarchy Manager"
@@ -102,6 +77,7 @@ export default function HierarchyApp({ onBack, onNavigate, embedded = false }: H
             showMenu={false}
             currentView="hierarchy"
             onMenuClick={() => { }}
+            contentStyle={{ padding: 0, background: 'transparent' }}
         >
             {content}
         </DashboardLayout>

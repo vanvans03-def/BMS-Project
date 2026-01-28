@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Layout, Menu, Button, Space, Typography, Dropdown, Avatar, Divider, theme } from 'antd';
 import {
   AppstoreOutlined, FileTextOutlined,
-  ArrowLeftOutlined, UserOutlined, LogoutOutlined, DownOutlined
+  ArrowLeftOutlined, UserOutlined, LogoutOutlined, DownOutlined, ClusterOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -22,6 +22,7 @@ interface DashboardLayoutProps {
   menuItems?: any[]; // Allow custom menu items
   contentStyle?: React.CSSProperties; // Allow custom content styles
   headerActions?: React.ReactNode;
+  onSystemSelect?: (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => void;
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
@@ -36,7 +37,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   showMenu = true,
   menuItems,
   headerActions,
-  contentStyle
+  contentStyle,
+  onSystemSelect
 }) => {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -100,6 +102,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         <div style={{ flex: 1 }} />
 
         <Space size="middle">
+          {onSystemSelect && (
+            <>
+              <Button
+                type="text"
+                icon={<FileTextOutlined />}
+                style={{ color: 'white' }}
+                onClick={() => onSystemSelect('LOGS')}
+              >
+                Central Logs
+              </Button>
+              <Button
+                type="text"
+                icon={<ClusterOutlined />}
+                style={{ color: 'white' }}
+                onClick={() => onSystemSelect('GLOBAL_SETTINGS')}
+              >
+                Global Settings
+              </Button>
+              <Divider type="vertical" style={{ background: 'rgba(255,255,255,0.2)' }} />
+            </>
+          )}
           {/* Custom Header Actions (e.g. Settings) */}
           {headerActions}
 

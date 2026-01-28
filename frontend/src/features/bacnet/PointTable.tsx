@@ -35,9 +35,12 @@ interface PointTableProps {
   // [NEW] Drag & Drop Props
   dragEnabled?: boolean
   onDragStart?: (e: React.DragEvent, point: Point) => void
+  // [NEW] Controlled Selection Props
+  selectedPointIds?: React.Key[]
+  onSelectionChange?: (selectedIds: React.Key[]) => void
 }
 
-export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewHistory, onConfigPoint, onAddToDatabase, onToggleHistory, dragEnabled, onDragStart }: PointTableProps) => {
+export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewHistory, onConfigPoint, onAddToDatabase, onToggleHistory, dragEnabled, onDragStart, selectedPointIds, onSelectionChange }: PointTableProps) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
 
@@ -46,6 +49,7 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
   const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
+    // ... (no change to effect) ...
     const newUpdated = new Set<number>()
 
     pointValues.forEach((value, pointId) => {
@@ -63,8 +67,9 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
     }
   }, [pointValues])
 
-  // ... (Functions formatValue, getValueColor คงเดิม) ...
+  // ... (Functions formatValue, getValueColor remain same) ...
   const formatValue = (value: any, objectType: string): string => {
+    // ... same as before ... 
     if (value === null || value === undefined) return "-"
 
     if (objectType.includes("BINARY")) {
@@ -79,6 +84,7 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
   }
 
   const getValueColor = (value: any, objectType: string): string => {
+    // ... same as before ...
     if (value === null || value === undefined) return "#999"
 
     if (objectType.includes("BINARY")) {
@@ -88,21 +94,30 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
     return "#1890ff"
   }
 
-  // ... (Columns คงเดิม) ...
-  // [NEW] Row Selection
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
+  // [NEW] Row Selection Logic (Controlled or Uncontrolled)
+  const [internalSelectedRowKeys, setInternalSelectedRowKeys] = useState<React.Key[]>([])
 
-  const onSelectChange = (newSelectedRowKeys: React.Key[]) => {
-    setSelectedRowKeys(newSelectedRowKeys);
-  };
+  const finalSelectedRowKeys = selectedPointIds !== undefined ? selectedPointIds : internalSelectedRowKeys
+
+  const onSelectChangeHandler = (newSelectedRowKeys: React.Key[]) => {
+    if (onSelectionChange) {
+      onSelectionChange(newSelectedRowKeys)
+    } else {
+      setInternalSelectedRowKeys(newSelectedRowKeys)
+    }
+  }
 
   const rowSelection = {
-    selectedRowKeys,
-    onChange: onSelectChange,
-  };
+    selectedRowKeys: finalSelectedRowKeys,
+    onChange: onSelectChangeHandler,
+    getCheckboxProps: (record: Point) => ({
+      disabled: record.object_type === 'OBJECT_DEVICE', // [FIX] Disable selection for DEVICE object
+    }),
+  }
 
   // ... (Columns) ...
   const columns: ColumnsType<Point> = [
+    // ... (Columns remain same) ...
     // [NEW] Hierarchy Status
     {
       title: '',
@@ -120,22 +135,19 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
       key: "type",
       width: 180,
       render: (text, record: any) => {
-        // Fallback if universal_type is missing
         const displayType = text || record.object_type?.replace("OBJECT_", "") || "UNKNOWN"
-
         let color = "default"
         let icon = <DatabaseOutlined />
 
         if (displayType.includes("BOOLEAN")) {
-          if (displayType.includes("_R")) { color = "purple"; icon = <CheckCircleOutlined /> } // Read
-          else { color = "magenta"; icon = <ThunderboltOutlined /> } // Write
+          if (displayType.includes("_R")) { color = "purple"; icon = <CheckCircleOutlined /> }
+          else { color = "magenta"; icon = <ThunderboltOutlined /> }
         } else if (displayType.includes("NUMERIC")) {
-          if (displayType.includes("_R")) { color = "blue"; icon = <LineChartOutlined /> } // Read
-          else { color = "orange"; icon = <EditOutlined /> } // Write
+          if (displayType.includes("_R")) { color = "blue"; icon = <LineChartOutlined /> }
+          else { color = "orange"; icon = <EditOutlined /> }
         } else if (displayType.includes("STRING")) {
           color = "cyan"; icon = <InfoCircleOutlined />
         } else {
-          // Fallback colors for raw types
           if (displayType.includes("BINARY")) color = "purple"
           else if (displayType.includes("ANALOG")) color = "blue"
         }
@@ -211,7 +223,6 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
         )
       },
     },
-    // [NEW] History Toggle Column
     {
       title: "History",
       key: "history",
@@ -312,24 +323,18 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
 
   return (
     <>
-      {/* [NEW] Bulk Actions Toolbar */}
-      {selectedRowKeys.length > 0 && (
+      {/* [NEW] Bulk Actions Toolbar - Removed 'Add to Database' button */}
+      {finalSelectedRowKeys.length > 0 && (
         <div style={{ marginBottom: 16, padding: '8px 16px', background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Space>
-            <Text strong>{selectedRowKeys.length} points selected</Text>
+            <Text strong>{finalSelectedRowKeys.length} points selected</Text>
           </Space>
           <Space>
-            <Button
-              type="primary"
-              icon={<DatabaseOutlined />}
-              onClick={() => {
-                if (onAddToDatabase) onAddToDatabase(selectedRowKeys)
-                setSelectedRowKeys([])
-              }}
-            >
-              Add to Database
-            </Button>
-            <Button onClick={() => setSelectedRowKeys([])}>Cancel</Button>
+            {/* 'Add to Database' button removed as per user request to use the bottom box instead */}
+            <Button onClick={() => {
+              if (onSelectionChange) onSelectionChange([])
+              else setInternalSelectedRowKeys([])
+            }}>Cancel</Button>
           </Space>
         </div>
       )}
@@ -360,12 +365,12 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
         scroll={{ x: 1000 }}
         rowClassName={(record) => {
           // [NEW] Visual feedback for draggable rows
-          if (dragEnabled && !record.location_id) return "fade-in-row draggable-row"
+          if (dragEnabled) return "fade-in-row draggable-row"
           return "fade-in-row"
         }}
         // [NEW] Native Drag & Drop Logic
         onRow={(record) => {
-          if (!dragEnabled || record.location_id) return {} // Only allow dragging if enabled AND point is not yet in DB (optional rule, or allow all)
+          if (!dragEnabled) return {}
           return {
             draggable: true,
             onDragStart: (e) => {

@@ -12,10 +12,11 @@ import { UserSettings } from '../../components/SettingsTabs'
 interface GlobalSettingsAppProps {
     onBack: () => void
     onNavigate?: (system: 'BACNET' | 'MODBUS', deviceId: number) => void
+    onSystemSelect?: (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => void
     initialTab?: string
 }
 
-export default function GlobalSettingsApp({ onBack, onNavigate, initialTab = 'hierarchy' }: GlobalSettingsAppProps) {
+export default function GlobalSettingsApp({ onBack, onNavigate, onSystemSelect, initialTab = 'hierarchy' }: GlobalSettingsAppProps) {
     const [activeTab, setActiveTab] = useState(initialTab)
 
     return (
@@ -27,6 +28,7 @@ export default function GlobalSettingsApp({ onBack, onNavigate, initialTab = 'hi
             showMenu={false}
             currentView="global-settings"
             onMenuClick={() => { }}
+            onSystemSelect={onSystemSelect}
         >
             <Card>
                 <Tabs

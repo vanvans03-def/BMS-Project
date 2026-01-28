@@ -77,9 +77,14 @@ const ModbusNetworkSettings = () => {
   )
 }
 
-interface ModbusAppProps { onBack: () => void; initialDeviceId?: number | null; initialView?: string }
+interface ModbusAppProps {
+  onBack: () => void;
+  initialDeviceId?: number | null;
+  initialView?: string;
+  onNavigate?: (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => void;
+}
 
-export default function ModbusApp({ onBack, initialDeviceId, initialView }: ModbusAppProps) {
+export default function ModbusApp({ onBack, initialDeviceId, initialView, onNavigate }: ModbusAppProps) {
   const [currentView, setCurrentView] = useState<string>(initialDeviceId ? "loading" : (initialView || "dashboard"))
   const [selectedGateway, setSelectedGateway] = useState<Device | null>(null)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
@@ -475,6 +480,34 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
             </Col>
             <Col>
               <Space>
+                <Button
+                  type="dashed"
+                  icon={<DatabaseOutlined />}
+                  onClick={async () => {
+                    if (!selectedDevice || !points) return;
+                    const hide = messageApi.loading('Adding to database/hierarchy...', 0);
+                    try {
+                      const res = await authFetch('/points/add-to-hierarchy', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                          deviceId: selectedDevice.id,
+                          pointIds: points.map(p => p.id)
+                        })
+                      });
+                      hide();
+                      if (res.ok) {
+                        messageApi.success('Added to Hierarchy successfully!');
+                      } else {
+                        messageApi.error('Failed to add to Hierarchy');
+                      }
+                    } catch (e) {
+                      hide();
+                      messageApi.error('Error adding to hierarchy');
+                    }
+                  }}
+                >
+                  Add to DB
+                </Button>
                 <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsPointModalOpen(true)}>Add Point</Button>
                 <Button icon={<ReloadOutlined />} onClick={() => refetchPoints()}>Refresh</Button>
               </Space>
@@ -551,6 +584,7 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView }: Modb
       onProfileClick={() => setIsProfileModalOpen(true)}
       menuItems={menuItems as any}
       headerActions={null}
+      onSystemSelect={onNavigate}
     >
       {contextHolder}
 

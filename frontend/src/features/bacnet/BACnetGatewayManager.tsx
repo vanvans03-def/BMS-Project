@@ -8,14 +8,14 @@
  * integrated with gateway settings (interface, port, localDeviceId, apduTimeout)
  */
 
-import { Table, Button, Space, Popconfirm, Tag, Badge, message, Spin, Modal, Form, Input, InputNumber, Row, Col, Typography, Alert, Checkbox, Select } from 'antd'
+import { Table, Button, Space, Popconfirm, Tag, Badge, message, Spin, Modal, Form, Input, InputNumber, Row, Col, Typography, Alert, Checkbox, Select, Divider } from 'antd'
 import { EditOutlined, DeleteOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons'
 import { useState, useEffect } from 'react'
 import type { ChangeEvent } from 'react'
 import * as configService from '../../services/configService'
 import type { NetworkInterface } from '../../services/configService'
 
-const { Title } = Typography
+const { Title, Text } = Typography
 
 interface BACnetGateway {
   id: number
@@ -256,16 +256,18 @@ export const BACnetGatewayManager = ({
     {
       title: 'Configuration',
       key: 'config',
-      width: 250,
+      width: 350,
       render: (_: any, record: BACnetGateway) => {
         if (!record.config) {
           return <div style={{ fontSize: '12px', color: '#999' }}>Not configured</div>
         }
         return (
           <div style={{ fontSize: '12px' }}>
-            <div>Interface: {record.config.interface}</div>
-            <div>Port: {record.config.port}</div>
-            <div>APDU Timeout: {record.config.apduTimeout}ms</div>
+            <div><Text strong>Interface:</Text> {record.config.interface} {record.config.ip ? `(${record.config.ip})` : ''}</div>
+            <Space split={<Divider type="vertical" />}>
+              <span><Text strong>Port:</Text> {record.config.port}</span>
+              <span><Text strong>Timeout:</Text> {record.config.apduTimeout}ms</span>
+            </Space>
           </div>
         )
       }

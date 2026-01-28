@@ -58,15 +58,15 @@ function App() {
 
   // Routing Logic
   if (currentSystem === 'BACNET') {
-    return <BACnetApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} initialView={targetView} />
+    return <BACnetApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} initialView={targetView} onNavigate={handleSystemSelect as any} />
   }
 
   if (currentSystem === 'MODBUS') {
-    return <ModbusApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} initialView={targetView} />
+    return <ModbusApp onBack={() => setCurrentSystem(null)} initialDeviceId={targetDeviceId} initialView={targetView} onNavigate={handleSystemSelect as any} />
   }
 
   if (currentSystem === 'LOGS') {
-    return <CentralLogsApp onBack={() => setCurrentSystem(null)} />
+    return <CentralLogsApp onBack={() => setCurrentSystem(null)} onNavigate={handleSystemSelect as any} />
   }
 
   if (currentSystem === 'HIERARCHY') {
@@ -75,7 +75,7 @@ function App() {
   }
 
   if (currentSystem === 'GLOBAL_SETTINGS') {
-    return <GlobalSettingsApp onBack={() => setCurrentSystem(null)} onNavigate={handleNavigate} />
+    return <GlobalSettingsApp onBack={() => setCurrentSystem(null)} onNavigate={handleNavigate} onSystemSelect={handleSystemSelect as any} />
   }
 
   // Default: Portal

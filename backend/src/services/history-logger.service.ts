@@ -48,15 +48,18 @@ class HistoryLoggerService {
         this.isRunning = true
 
         try {
-            // Fetch enabled devices
-            const devices = await sql`
-                SELECT id, device_name, polling_interval, logging_type
-                FROM devices 
-                WHERE is_history_enabled = true
+            // [UPDATED] Select devices that have AT LEAST ONE point with history enabled
+            const devicesToPoll = await sql`
+                SELECT DISTINCT d.id, d.device_name, d.polling_interval, d.logging_type
+                FROM devices d
+                JOIN points p ON d.id = p.device_id
+                WHERE p.is_history_enabled = true
+                AND d.status != 'failed'
             `
+
             const now = Date.now()
 
-            for (const device of devices) {
+            for (const device of devicesToPoll) {
                 const interval = device.polling_interval || 60000
                 const lastPoll = this.lastPollMap.get(device.id) || 0
 
@@ -74,34 +77,39 @@ class HistoryLoggerService {
 
     private async pollDevice(device: any, timestamp: number) {
         this.lastPollMap.set(device.id, timestamp)
-        const loggingType = device.logging_type || 'COV' // Default to COV
+        const loggingType = device.logging_type || 'COV'
 
         try {
-            // 1. Fetch Point Metadata (Name & Table) for Table Resolution
-            const pointsMeta = await sql`SELECT id, point_name, report_table_name FROM points WHERE device_id = ${device.id}`
-            const pointMap = new Map<number, { name: string, tableName: string | null }>()
-            pointsMeta.forEach(p => pointMap.set(p.id, { name: p.point_name, tableName: p.report_table_name }))
+            // 1. Fetch Point Metadata - Only fetch points that have history enabled
+            const pointsMeta = await sql`
+                SELECT id, point_name, report_table_name, is_history_enabled 
+                FROM points 
+                WHERE device_id = ${device.id} AND is_history_enabled = true
+            `
+
+            if (pointsMeta.length === 0) return
+
+            const pointMap = new Map<number, any>()
+            pointsMeta.forEach(p => pointMap.set(p.id, p))
 
             // 2. Read Values
             const result = await monitorService.readDevicePoints(device.id)
 
             if (!result.success || !result.values.length) {
-                await sql`UPDATE devices SET status = 'failed' WHERE id = ${device.id}`
+                // Don't mark as failed immediately if just read error, but maybe log warning
+                // Keep old logic if needed, but here we just return
                 return
             }
 
-            const validData = result.values.filter(v => v.status === 'ok' && v.value !== null)
-            if (validData.length === 0) {
-                await sql`UPDATE devices SET status = 'failed' WHERE id = ${device.id}`
-                return
-            }
-
+            const validData = result.values.filter((v: any) => v.status === 'ok' && v.value !== null)
             let logCount = 0
 
             for (const v of validData) {
                 const pointId = v.pointId
                 const meta = pointMap.get(pointId)
-                if (!meta) continue
+
+                // [CRITICAL] Skip if this specific point is not enabled for history
+                if (!meta || !meta.is_history_enabled) continue
 
                 const newValue = Number(v.value)
                 const lastCache = this.pointCache.get(pointId)
@@ -116,10 +124,10 @@ class HistoryLoggerService {
                     if (timeDiff >= this.MAX_INTERVAL_MS) {
                         shouldLog = true
                     } else {
-                        const loading = Math.abs(newValue - lastCache.value)
+                        const diff = Math.abs(newValue - lastCache.value)
                         const percentChange = lastCache.value === 0
                             ? (newValue === 0 ? 0 : 100)
-                            : (loading / Math.abs(lastCache.value)) * 100
+                            : (diff / Math.abs(lastCache.value)) * 100
 
                         if (percentChange >= this.DEADBAND_PERCENT) {
                             shouldLog = true
@@ -128,16 +136,13 @@ class HistoryLoggerService {
                 }
 
                 if (shouldLog) {
-                    // DYNAMIC TABLE WRITE
-                    let tableName = meta.tableName
+                    let tableName = meta.report_table_name
 
-                    // Lazy Provisioning: If table name missing, create it and update DB
                     if (!tableName) {
-                        tableName = historyTableService.getTableName(device.device_name, meta.name)
+                        tableName = historyTableService.getTableName(device.device_name, meta.point_name)
                         await historyTableService.ensureTableExists(tableName)
                         await sql`UPDATE points SET report_table_name = ${tableName} WHERE id = ${pointId}`
-                        // Update local map to avoid re-provisioning in same loop (though unlikely to loop same point twice)
-                        meta.tableName = tableName
+                        meta.report_table_name = tableName
                     }
 
                     await sql`
@@ -151,18 +156,11 @@ class HistoryLoggerService {
             }
 
             if (logCount > 0) {
-                console.log(`✅ [History] Logged ${logCount} points for ${device.device_name} (Dynamic Tables)`)
+                console.log(`✅ [History] Logged ${logCount} points for ${device.device_name}`)
             }
-
-            await sql`
-                UPDATE devices 
-                SET status = 'online', last_seen = NOW()
-                WHERE id = ${device.id}
-            `
 
         } catch (err) {
             console.error(`❌ [History] Failed to log ${device.device_name}:`, err)
-            await sql`UPDATE devices SET status = 'failed' WHERE id = ${device.id}`
         }
     }
 }
