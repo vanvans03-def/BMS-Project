@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Layout, Menu, Button, Space, Typography, Dropdown, Avatar, Divider, theme } from 'antd';
 import {
   AppstoreOutlined, FileTextOutlined,
-  ArrowLeftOutlined, UserOutlined, LogoutOutlined, DownOutlined, ClusterOutlined
+  ArrowLeftOutlined, UserOutlined, LogoutOutlined, DownOutlined,
+  ClusterOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -22,7 +23,7 @@ interface DashboardLayoutProps {
   menuItems?: any[]; // Allow custom menu items
   contentStyle?: React.CSSProperties; // Allow custom content styles
   headerActions?: React.ReactNode;
-  onSystemSelect?: (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => void;
+  onNavigate?: (key: 'LOGS' | 'GLOBAL_SETTINGS') => void;
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
@@ -38,7 +39,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   menuItems,
   headerActions,
   contentStyle,
-  onSystemSelect
+  onNavigate
 }) => {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -102,31 +103,29 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         <div style={{ flex: 1 }} />
 
         <Space size="middle">
-          {onSystemSelect && (
-            <>
-              <Button
-                type="text"
-                icon={<FileTextOutlined />}
-                style={{ color: 'white' }}
-                onClick={() => onSystemSelect('LOGS')}
-              >
-                Central Logs
-              </Button>
-              <Button
-                type="text"
-                icon={<ClusterOutlined />}
-                style={{ color: 'white' }}
-                onClick={() => onSystemSelect('GLOBAL_SETTINGS')}
-              >
-                Global Settings
-              </Button>
-              <Divider type="vertical" style={{ background: 'rgba(255,255,255,0.2)' }} />
-            </>
-          )}
+          {/* Global Header Actions */}
+          <Button
+            type="text"
+            icon={<FileTextOutlined />}
+            style={{ color: 'white' }}
+            onClick={() => onNavigate && onNavigate('LOGS')}
+          >
+            Central Logs
+          </Button>
+          <Button
+            type="text"
+            icon={<ClusterOutlined />}
+            style={{ color: 'white' }}
+            onClick={() => onNavigate && onNavigate('GLOBAL_SETTINGS')}
+          >
+            Global Settings
+          </Button>
+
           {/* Custom Header Actions (e.g. Settings) */}
           {headerActions}
 
           <Dropdown menu={userMenu} placement="bottomRight" trigger={['click']}>
+
             <Button type="text" style={{ color: 'white', height: 'auto', padding: '4px 12px' }}>
               <Space>
                 <Avatar style={{ backgroundColor: themeColor }} icon={<UserOutlined />} />

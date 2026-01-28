@@ -8,7 +8,8 @@ import {
   NumberOutlined,
   DeleteOutlined,
   DatabaseOutlined, // [NEW] เพิ่ม Icon สำหรับ Input Register
-  LineChartOutlined
+  LineChartOutlined,
+  CheckCircleOutlined, InfoCircleOutlined,
 } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import { AnimatedNumber } from '../../components/AnimatedNumber'
@@ -24,10 +25,15 @@ interface Props {
   loading: boolean
   onWrite: (point: Point) => void
   onDelete: (pointId: number) => void
-  onViewHistory: (point: Point) => void // [NEW]
+  onViewHistory: (point: Point) => void
+  // [NEW] Props
+  dragEnabled?: boolean
+  onDragStart?: (e: React.DragEvent, point: Point) => void
+  selectedPointIds?: React.Key[]
+  onSelectionChange?: (selectedIds: React.Key[]) => void
 }
 
-export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDelete, onViewHistory }: Props) => {
+export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDelete, onViewHistory, dragEnabled, onDragStart, selectedPointIds, onSelectionChange }: Props) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
 
@@ -54,6 +60,17 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
   }, [pointValues])
 
   const columns: ColumnsType<Point> = [
+    // [NEW] Added to Hierarchy Status
+    {
+      title: '',
+      key: 'status',
+      width: 40,
+      render: (_, record: any) => (
+        record.location_id ? // Check if point has location_id (added to hierarchy)
+          <CheckCircleOutlined style={{ color: '#52c41a' }} /> :
+          <InfoCircleOutlined style={{ color: '#faad14', opacity: 0.5 }} />
+      )
+    },
     {
       title: 'Type',
       dataIndex: 'register_type',
@@ -298,8 +315,18 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
     }
   ]
 
+  const rowSelection = {
+    selectedRowKeys: selectedPointIds,
+    onChange: onSelectionChange,
+    getCheckboxProps: (record: Point) => ({
+      disabled: false,
+    }),
+  }
+
   return (
     <Table
+      // [NEW]
+      rowSelection={selectedPointIds ? rowSelection : undefined}
       columns={columns}
       dataSource={points}
       rowKey="id"
@@ -321,6 +348,24 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
         }
       }}
       scroll={{ x: 800 }}
+      rowClassName={(record) => {
+        // [NEW] Visual feedback for draggable rows
+        if (dragEnabled) return "draggable-row"
+        return ""
+      }}
+      // [NEW] Native Drag & Drop Logic
+      onRow={(record) => {
+        if (!dragEnabled) return {}
+        return {
+          draggable: true,
+          onDragStart: (e) => {
+            // Set drag data
+            if (onDragStart) onDragStart(e, record)
+            e.dataTransfer.effectAllowed = "move"
+          },
+          style: { cursor: 'grab' }
+        }
+      }}
     />
   )
 }

@@ -3,7 +3,7 @@ import { Table, Button, Badge, Typography, Space, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import AOS from 'aos'
-import { SettingOutlined, ClockCircleOutlined } from '@ant-design/icons'
+import { SettingOutlined, GlobalOutlined, EyeOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import type { Device } from '../../types/common'
 
 const { Text } = Typography
@@ -46,27 +46,29 @@ export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDe
       key: 'status',
       width: 100,
       align: 'center',
-      render: () => <Badge status="success" text="Online" style={{ color: '#52c41a' }} />
+      render: () => <Badge status="success" text="Online" />
     },
     {
       title: 'Device Name',
       dataIndex: 'device_name',
       key: 'device_name',
-      render: (text, record) => (
-        <div>
-          <Text strong style={{ fontSize: 15 }}>{text}</Text>
-          <br />
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            ID: {record.device_instance_id ?? '-'}
-          </Text>
-        </div>
-      )
+      render: (text) => <Text strong>{text}</Text>
     },
     {
-      title: 'IP Address',
-      dataIndex: 'ip_address',
-      key: 'ip_address',
-      responsive: ['lg']
+      title: 'Connection',
+      key: 'connection',
+      render: (_, record) => {
+        return (
+          <Space direction="vertical" size={0}>
+            <Tag icon={<GlobalOutlined />} color="blue">
+              {record.ip_address}
+            </Tag>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Device ID: {record.device_instance_id}
+            </Text>
+          </Space>
+        )
+      }
     },
     // [NEW] Polling Column
     {
@@ -80,10 +82,12 @@ export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDe
         return (
           <Space>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <Text style={{ color: isCustom ? '#1890ff' : '#8c8c8c' }}>
-                <ClockCircleOutlined /> {interval} ms
+              <Text style={{ color: isCustom ? '#1890ff' : '#8c8c8c', fontWeight: isCustom ? 600 : 400 }}>
+                <ThunderboltOutlined /> {interval} ms
               </Text>
-              {isCustom && <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', margin: 0, width: 'fit-content' }}>Custom</Tag>}
+              <Text type="secondary" style={{ fontSize: 10 }}>
+                {isCustom ? 'Custom Setting' : 'System Default'}
+              </Text>
             </div>
             <Button size="small" type="text" icon={<SettingOutlined />} onClick={(e) => { e.stopPropagation(); onEditDevice(record); }} />
           </Space>
@@ -93,13 +97,12 @@ export const DeviceTable = ({ devices, loading, defaultPollingInterval, onViewDe
     {
       title: 'Action',
       key: 'action',
-      align: 'center',
-      width: 180,
+      align: 'right',
       render: (_, record) => (
         <Space>
-          <Button type="default" size="small" icon={<SettingOutlined />} onClick={(e) => { e.stopPropagation(); onConfigDevice(record); }} />
-          <Button type="primary" size="small" onClick={() => onViewDevice(record)}>
-            View Points
+          <Button type="default" icon={<SettingOutlined />} onClick={(e) => { e.stopPropagation(); onConfigDevice(record); }} />
+          <Button type="primary" ghost icon={<EyeOutlined />} onClick={() => onViewDevice(record)}>
+            Points
           </Button>
         </Space>
       )

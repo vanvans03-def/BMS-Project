@@ -37,7 +37,7 @@ interface BACnetAppProps {
   onBack: () => void;
   initialDeviceId?: number | null;
   initialView?: string;
-  onNavigate?: (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => void;
+  onNavigate?: (key: string) => void;
 }
 
 export default function BACnetApp({ onBack, initialDeviceId, initialView, onNavigate }: BACnetAppProps) {
@@ -568,7 +568,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView, onNavi
       onMenuClick={handleMenuClick}
       menuItems={menuItems as any}
       headerActions={null}
-      onSystemSelect={onNavigate}
+      onNavigate={onNavigate as any}
     >
       {contextHolder}
 

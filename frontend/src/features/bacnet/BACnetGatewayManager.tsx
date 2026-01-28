@@ -9,7 +9,7 @@
  */
 
 import { Table, Button, Space, Popconfirm, Tag, Badge, message, Spin, Modal, Form, Input, InputNumber, Row, Col, Typography, Alert, Checkbox, Select, Divider } from 'antd'
-import { EditOutlined, DeleteOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons'
+import { EditOutlined, DeleteOutlined, PlusOutlined, SettingOutlined, FolderOpenOutlined, GlobalOutlined } from '@ant-design/icons'
 import { useState, useEffect } from 'react'
 import type { ChangeEvent } from 'react'
 import * as configService from '../../services/configService'
@@ -234,39 +234,41 @@ export const BACnetGatewayManager = ({
       dataIndex: 'enable',
       key: 'enable',
       width: 100,
+      align: 'center' as const,
       render: (enable: boolean) => (
         <Badge
-          status={enable ? 'processing' : 'default'}
-          text={enable ? 'Enabled' : 'Disabled'}
+          status={enable ? 'success' : 'default'}
+          text={enable ? 'Online' : 'Offline'}
         />
       )
     },
     {
       title: 'Gateway Name',
       dataIndex: 'name',
-      key: 'name'
+      key: 'name',
+      render: (text: string) => <Text strong style={{ fontSize: 16 }}>{text}</Text>
     },
     {
-      title: 'Device ID',
-      dataIndex: ['config', 'localDeviceId'],
-      key: 'localDeviceId',
-      width: 100,
-      render: (id: number) => <Tag color="blue">{id}</Tag>
-    },
-    {
-      title: 'Configuration',
+      title: 'Network Configuration',
       key: 'config',
-      width: 350,
       render: (_: any, record: BACnetGateway) => {
         if (!record.config) {
           return <div style={{ fontSize: '12px', color: '#999' }}>Not configured</div>
         }
         return (
           <div style={{ fontSize: '12px' }}>
-            <div><Text strong>Interface:</Text> {record.config.interface} {record.config.ip ? `(${record.config.ip})` : ''}</div>
-            <Space split={<Divider type="vertical" />}>
-              <span><Text strong>Port:</Text> {record.config.port}</span>
-              <span><Text strong>Timeout:</Text> {record.config.apduTimeout}ms</span>
+            <Space direction="vertical" size={2}>
+              <Space>
+                <Tag icon={<GlobalOutlined />} color="geekblue">
+                  {record.config.interface} {record.config.ip ? `(${record.config.ip})` : ''}
+                </Tag>
+                <Tag color="default">
+                  Port: {record.config.port}
+                </Tag>
+              </Space>
+              <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
+                ID: {record.config.localDeviceId} | Timeout: {record.config.apduTimeout}ms
+              </Text>
             </Space>
           </div>
         )
@@ -275,21 +277,20 @@ export const BACnetGatewayManager = ({
     {
       title: 'Action',
       key: 'actions',
-      width: 200,
+      align: 'right' as const,
       render: (_: any, record: BACnetGateway) => (
         <Space>
           <Button
-            type="default"
-            size="small"
             icon={<SettingOutlined />}
             onClick={() => handleOpenEditModal(record)}
           />
           <Button
             type="primary"
-            size="small"
+            ghost
+            icon={<FolderOpenOutlined />}
             onClick={() => onSelectGateway?.(record)}
           >
-            View Devices
+            Open Network
           </Button>
           <Popconfirm
             title="Delete Gateway"
@@ -298,7 +299,7 @@ export const BACnetGatewayManager = ({
             okText="Yes"
             cancelText="No"
           >
-            <Button danger size="small" icon={<DeleteOutlined />} />
+            <Button danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       )

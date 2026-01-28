@@ -2,31 +2,34 @@ import { useState } from 'react'
 import { Card, theme } from 'antd'
 import { FileTextOutlined } from '@ant-design/icons'
 import { LogsPage } from '../../components/LogsPage'
-import { DashboardLayout } from '../../components/layout/DashboardLayout'
 import { ProfileModal } from '../../components/ProfileModal'
+import { DashboardLayout } from '../../components/layout/DashboardLayout'
 
 interface CentralLogsAppProps {
   onBack: () => void
-  onNavigate?: (system: 'BACNET' | 'MODBUS' | 'LOGS' | 'HIERARCHY' | 'GLOBAL_SETTINGS', view?: string) => void
+  onNavigate?: (key: string) => void
 }
 
 export default function CentralLogsApp({ onBack, onNavigate }: CentralLogsAppProps) {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
-  const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken()
 
   return (
     <DashboardLayout
       title="Central Logs"
       headerIcon={<FileTextOutlined />}
       themeColor="#722ed1"
-      currentView="logs"
       onBack={onBack}
+      currentView="logs"
       onMenuClick={() => { }}
-      showMenu={false}
-      onSystemSelect={onNavigate}
+      showMenu={false} // Logs usually full width or specific internal internal menu
       onProfileClick={() => setIsProfileModalOpen(true)}
+      headerActions={null}
+      onNavigate={onNavigate as any}
     >
-      <LogsPage />
+      <Card>
+        <LogsPage />
+      </Card>
+
       <ProfileModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
     </DashboardLayout>
   )

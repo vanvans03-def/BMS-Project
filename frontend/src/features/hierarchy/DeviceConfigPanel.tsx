@@ -19,6 +19,7 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
     // Data States
     const [points, setPoints] = useState<any[]>([])
     const [devices, setDevices] = useState<any[]>([])
+    const [activePoint, setActivePoint] = useState<any>(null) // [NEW] Local state for single point
     const [loading, setLoading] = useState(false)
     const [messageApi, contextHolder] = message.useMessage()
 
@@ -31,14 +32,30 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
     // Treat Gateways/Floors/Buildings as Folders
     const isFolderView = !isPointView && !isDeviceView && (selectedLocation?.type === 'Folder' || selectedLocation?.type === 'Building' || selectedLocation?.type === 'Floor' || selectedLocation?.type === 'Gateway')
 
+    // Reset activePoint when selection changes
+    useEffect(() => {
+        if (isPointView && selectedLocation) {
+            setActivePoint(selectedLocation)
+        } else {
+            setActivePoint(null)
+        }
+    }, [selectedLocation, isPointView])
+
     // 2. Fetch Data
     const fetchData = useCallback(async () => {
         if (!selectedLocation) return
         setLoading(true)
         try {
             if (isPointView) {
-                // Point view: polling handles data
-                // We could fetch fresh details if needed
+                // Point view: Fetch fresh details (via parent device/location points)
+                if (selectedLocation.location_id) {
+                    const res = await authFetch(`/points/by-location/${selectedLocation.location_id}`)
+                    if (res.ok) {
+                        const allPoints = await res.json()
+                        const freshPoint = allPoints.find((p: any) => p.id === selectedLocation.id)
+                        if (freshPoint) setActivePoint(freshPoint)
+                    }
+                }
             } else if (isFolderView) {
                 // Fetch Devices in this Folder
                 // Logic: Find devices whose `location_id` corresponds to a child of this location
@@ -159,12 +176,8 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
                 if (isDeviceView) {
                     setPoints(prev => prev.map(p => p.id === pointId ? { ...p, is_history_enabled: !current } : p))
                 }
-                // If isPointView, visual toggle handled by logic below via prop/refresh?
-                // Ideally refresh data
                 if (isPointView) {
-                    // We can't easily update `selectedLocation` prop, but we can update a local override or just reload
-                    // Since `selectedLocation` comes from tree, best to refresh or just assume success visually?
-                    // Let's rely on Refresh button for full sync, but we can optimize later.
+                    setActivePoint((prev: any) => prev ? { ...prev, is_history_enabled: !current } : prev)
                 }
             } else {
                 messageApi.error('Failed to toggle history')
@@ -174,9 +187,8 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
 
     // --- RENDER: SINGLE POINT VIEW ---
     if (isPointView) {
-        // Merge prop data with any realtime/updated data if possible. 
-        // For now use selectedLocation as source of truth for static meta.
-        const point = selectedLocation
+        // Use activePoint if available, otherwise fallback to selectedLocation
+        const point = activePoint || selectedLocation
         const val = realtimeValues.get(point.id)
 
         return (
