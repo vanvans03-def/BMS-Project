@@ -76,11 +76,11 @@ export const settingsService = {
   async updateSettings(newSettings: SystemSettings, userName: string = 'Admin'): Promise<boolean> {
     try {
       // 1. บันทึกค่าลง DB (เหมือนเดิม)
-      await sql.begin(async sql => {
+      await sql.begin(async txn => {
         for (const [key, value] of Object.entries(newSettings)) {
           if (value === undefined || value === null) continue;
           const valueStr = String(value)
-          await sql`
+          await (txn as any)`
               INSERT INTO system_settings (key_name, value_text, updated_at)
               VALUES (${key}, ${valueStr}, NOW())
               ON CONFLICT (key_name) 

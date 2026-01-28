@@ -9,7 +9,7 @@
  */
 
 import { Table, Button, Space, Popconfirm, Tag, Badge, message, Spin, Modal, Form, Input, InputNumber, Row, Col, Typography, Alert, Checkbox, Select } from 'antd'
-import { EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons'
+import { EditOutlined, DeleteOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons'
 import { useState, useEffect } from 'react'
 import type { ChangeEvent } from 'react'
 import * as configService from '../../services/configService'
@@ -23,6 +23,7 @@ interface BACnetGateway {
   enable: boolean
   config: {
     interface: string
+    ip?: string
     port: number
     localDeviceId: number
     apduTimeout?: number
@@ -101,9 +102,13 @@ export const BACnetGatewayManager = ({
   const loadGateways = async () => {
     setLoading(true)
     try {
-      const gateway = await configService.getBacnetNetwork()
-      if (gateway) {
-        setGateways([gateway as any])
+      const response = await configService.getBacnetNetwork()
+      // [FIX] Response is now an array of objects
+      if (Array.isArray(response)) {
+        setGateways(response.map(item => item.network as any))
+      } else if (response && (response as any).network) {
+        // Fallback for legacy structure if any
+        setGateways([(response as any).network as any])
       } else {
         setGateways([])
       }
@@ -122,6 +127,7 @@ export const BACnetGatewayManager = ({
     form.setFieldsValue({
       enable: true,
       interface: '',
+      ip: '',
       port: 47808,
       localDeviceId: 1,
       apduTimeout: 3000
@@ -148,18 +154,23 @@ export const BACnetGatewayManager = ({
     const iface = networkInterfaces.find(i => i.name === interfaceName)
     if (iface) {
       setSelectedInterface(iface)
+      form.setFieldsValue({ ip: iface.ip })
     }
   }
 
   const handleOpenEditModal = (gateway: BACnetGateway) => {
     setEditingGateway(gateway)
+    // Load interfaces to ensure we have the list
+    loadNetworkInterfaces()
+
     form.setFieldsValue({
       name: gateway.name,
       enable: gateway.enable,
-      interface: gateway.config.interface,
-      port: gateway.config.port,
-      localDeviceId: gateway.config.localDeviceId,
-      apduTimeout: gateway.config.apduTimeout || 3000
+      interface: gateway.config?.interface || '',
+      ip: gateway.config?.ip || '',
+      port: gateway.config?.port || 47808,
+      localDeviceId: gateway.config?.localDeviceId || 1,
+      apduTimeout: gateway.config?.apduTimeout || 3000
     })
     setIsModalOpen(true)
   }
@@ -174,6 +185,7 @@ export const BACnetGatewayManager = ({
         enable: values.enable,
         config: {
           interface: values.interface,
+          ip: values.ip,
           port: values.port,
           localDeviceId: values.localDeviceId,
           apduTimeout: values.apduTimeout
@@ -265,18 +277,17 @@ export const BACnetGatewayManager = ({
       render: (_: any, record: BACnetGateway) => (
         <Space>
           <Button
+            type="default"
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={() => handleOpenEditModal(record)}
+          />
+          <Button
             type="primary"
             size="small"
             onClick={() => onSelectGateway?.(record)}
           >
-            View
-          </Button>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleOpenEditModal(record)}
-          >
-            Edit
+            View Devices
           </Button>
           <Popconfirm
             title="Delete Gateway"
@@ -361,12 +372,12 @@ export const BACnetGatewayManager = ({
               </Col>
               <Col xs={24} sm={12}>
                 <Form.Item
+                  name="ip"
                   label="Interface IP"
+                  rules={[{ required: true, message: 'IP is required' }]}
                 >
                   <Input
-                    disabled
-                    value={selectedInterface?.ip || 'Not selected'}
-                    placeholder="Interface IP"
+                    placeholder="Interface IP (e.g. 192.168.1.10)"
                   />
                 </Form.Item>
               </Col>

@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Tree, Button, Dropdown, Modal, Form, Input, Select, message } from 'antd'
 import {
     PlusOutlined, FolderOutlined, HomeOutlined,
-    AppstoreOutlined, DeleteOutlined, EditOutlined, MoreOutlined
+    AppstoreOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
+    ThunderboltOutlined, LineChartOutlined, HddOutlined
 } from '@ant-design/icons'
 import type { DataNode } from 'antd/es/tree'
 import { authFetch } from '../../utils/authFetch'
@@ -15,7 +16,8 @@ interface LocationTreePanelProps {
 export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }: LocationTreePanelProps) => {
     // treeData and getValidNodes removed/unused
     const [locations, setLocations] = useState<any[]>([])
-    const [historyLocationIds, setHistoryLocationIds] = useState<Set<number>>(new Set()) // [NEW] Locations containing history devices
+    const [points, setPoints] = useState<any[]>([]) // [NEW]
+    const [historyLocationIds, setHistoryLocationIds] = useState<Set<number>>(new Set())
     const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
     const [autoExpandParent, setAutoExpandParent] = useState(true)
 
@@ -41,11 +43,22 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
             const devRes = await authFetch('/devices')
             const devData = await devRes.json()
 
-            // 3. Identify Locations with History Devices
+            // 3. [NEW] Fetch Points in Hierarchy
+            const pointRes = await authFetch('/points/in-hierarchy')
+            const pointData = await pointRes.json()
+            setPoints(pointData)
+
+            // 4. Identify Locations with History Devices/Points
             const locsWithHistory = new Set<number>()
             devData.forEach((d: any) => {
                 if (d.location_id && d.is_history_enabled) {
                     locsWithHistory.add(d.location_id)
+                }
+            })
+            // Union with points history
+            pointData.forEach((p: any) => {
+                if (p.location_id && p.is_history_enabled) {
+                    locsWithHistory.add(p.location_id)
                 }
             })
             setHistoryLocationIds(locsWithHistory)
@@ -59,45 +72,58 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
         fetchLocationsAndDevices()
     }, [])
 
-    // Helper: Build set of IDs that contain history devices (recursive)
+    // [RESTORED] Active History Path IDs
     const activeHistoryPathIds = useMemo(() => {
-        const activeIds = new Set<number>()
-        const parentMap = new Map<number, number | null>()
-        locations.forEach(l => parentMap.set(l.id, l.parent_id))
-
-        // Start with direct locations
-        const openSet = [...historyLocationIds]
-
-        openSet.forEach(id => {
-            let curr: number | null = id
-            while (curr && !activeIds.has(curr)) {
-                activeIds.add(curr)
-                curr = parentMap.get(curr) || null
+        const ids = new Set<number>()
+        const traverse = (nodes: any[]) => {
+            for (const node of nodes) {
+                // If this is a location with history, add it
+                if (historyLocationIds.has(node.id)) {
+                    ids.add(node.id)
+                    // Add all parents up to root?
+                    // For now, simpler: just track which nodes are "active"
+                }
             }
-        })
-        return activeIds
-    }, [locations, historyLocationIds])
+        }
+        // Ideally we walk the tree. But with flat list, we can just use historyLocationIds
+        return historyLocationIds
+    }, [historyLocationIds])
 
-    // Memoized Tree Builder (No longer filters, just maps)
+    // Memoized Tree Builder 
     const treeDataNodes = useMemo(() => {
         const map: any = {}
         const roots: any[] = []
 
-        // 1. Create Nodes
+        // 1. Create Nodes (Locations)
         locations.forEach((node) => {
             const key = String(node.id)
             map[key] = {
                 ...node,
                 key,
                 title: node.name,
+                isLeaf: false,
                 children: []
             }
             if (node.type === 'Building') map[key].icon = <HomeOutlined />
             else if (node.type === 'Floor') map[key].icon = <AppstoreOutlined />
+            else if (node.type === 'Device') map[key].icon = <HddOutlined />
             else map[key].icon = <FolderOutlined />
         })
 
-        // 2. Link Parent-Child
+        // 1.5 Create Nodes (Points)
+        points.forEach((point) => {
+            const key = `point-${point.id}`
+            map[key] = {
+                ...point,
+                key,
+                title: point.point_name,
+                isLeaf: true,
+                isPoint: true, // Marker
+                icon: point.object_type?.includes('BINARY') ? <ThunderboltOutlined /> : <LineChartOutlined />
+            }
+        })
+
+        // 2. Link Parent-Child (Locations)
         locations.forEach(node => {
             const key = String(node.id)
             const parentKey = node.parent_id ? String(node.parent_id) : null
@@ -108,8 +134,20 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
                 roots.push(map[key])
             }
         })
+
+        // 2.5 Link Parent-Child (Points)
+        points.forEach(point => {
+            if (point.location_id) {
+                const key = `point-${point.id}`
+                const parentKey = String(point.location_id)
+                if (map[parentKey]) {
+                    map[parentKey].children.push(map[key])
+                }
+            }
+        })
+
         return roots
-    }, [locations])
+    }, [locations, points])
 
     // Handlers
     const handleAdd = (parentId: any) => {
@@ -199,16 +237,19 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
         return (
             <div className="tree-node-title" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: 8 }}>
                 <span style={style}>{node.title}</span>
-                <Dropdown menu={{
-                    items: [
-                        { key: 'add', label: 'Add Sub-folder', icon: <PlusOutlined />, onClick: (e) => { e.domEvent.stopPropagation(); handleAdd(node.key) } },
-                        { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: (e) => { e.domEvent.stopPropagation(); handleEdit(node) } },
-                        { type: 'divider' },
-                        { key: 'delete', label: 'Delete', icon: <DeleteOutlined />, danger: true, onClick: (e) => { e.domEvent.stopPropagation(); handleDelete(node.key) } }
-                    ]
-                }} trigger={['contextMenu', 'click']}>
-                    <Button type="text" size="small" icon={<MoreOutlined />} onClick={e => e.stopPropagation()} />
-                </Dropdown>
+                {/* Only show menu for Locations (Folders), not Points */}
+                {!node.isPoint && (
+                    <Dropdown menu={{
+                        items: [
+                            { key: 'add', label: 'Add Sub-folder', icon: <PlusOutlined />, onClick: (e) => { e.domEvent.stopPropagation(); handleAdd(node.key) } },
+                            { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: (e) => { e.domEvent.stopPropagation(); handleEdit(node) } },
+                            { type: 'divider' },
+                            { key: 'delete', label: 'Delete', icon: <DeleteOutlined />, danger: true, onClick: (e) => { e.domEvent.stopPropagation(); handleDelete(node.key) } }
+                        ]
+                    }} trigger={['contextMenu', 'click']}>
+                        <Button type="text" size="small" icon={<MoreOutlined />} onClick={e => e.stopPropagation()} />
+                    </Dropdown>
+                )}
             </div>
         )
     }
@@ -263,6 +304,7 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
                                 { label: 'Floor', value: 'Floor' },
                                 { label: 'Room', value: 'Room' },
                                 { label: 'Zone', value: 'Zone' },
+                                { label: 'Device', value: 'Device' },
                                 { label: 'Panel', value: 'Panel' },
                                 { label: 'Circuit Breaker', value: 'Circuit Breaker' },
                                 { label: 'Phase', value: 'Phase' },

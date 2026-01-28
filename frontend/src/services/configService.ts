@@ -109,7 +109,13 @@ export const createNetworkConfig = async (
       body: JSON.stringify({ name, protocol, config, enable })
     })
     if (!response.ok) throw new Error(`Failed to create network: ${response.status}`)
-    return await response.json()
+
+    const data = await response.json()
+    // [USER REQUEST] Handle 200 OK with error body
+    if (data && data.status === 'failed') {
+      throw new Error(data.message || 'Failed to create network')
+    }
+    return data
   } catch (error) {
     console.error('createNetworkConfig error:', error)
     throw error
@@ -129,7 +135,13 @@ export const updateNetworkConfig = async (
       body: JSON.stringify(updates)
     })
     if (!response.ok) throw new Error(`Failed to update network: ${response.status}`)
-    return await response.json()
+
+    const data = await response.json()
+    // [USER REQUEST] Handle 200 OK with error body
+    if (data && data.status === 'failed') {
+      throw new Error(data.message || 'Failed to update network')
+    }
+    return data
   } catch (error) {
     console.error('updateNetworkConfig error:', error)
     throw error
@@ -156,7 +168,7 @@ export const deleteNetworkConfig = async (id: number): Promise<void> => {
 /**
  * Get BACnet network configuration
  */
-export const getBacnetNetwork = async (): Promise<NetworkConfig> => {
+export const getBacnetNetwork = async (): Promise<Array<{ network: NetworkConfig; devices: any[]; points: any[] }>> => {
   try {
     const response = await authFetch('/config/bacnet/network')
     if (!response.ok) throw new Error(`Failed to fetch BACnet network: ${response.status}`)
@@ -327,7 +339,7 @@ export const getNetworkInterfaces = async (): Promise<NetworkInterface[]> => {
     const response = await authFetch('/settings/interfaces')
     if (!response.ok) throw new Error(`Failed to fetch network interfaces: ${response.status}`)
     const interfaces = await response.json()
-    
+
     // Check if response is array of objects (new format) or array of strings (legacy)
     if (interfaces.length > 0 && typeof interfaces[0] === 'object') {
       // Already in correct format with ip, mac, type
@@ -341,7 +353,7 @@ export const getNetworkInterfaces = async (): Promise<NetworkInterface[]> => {
         type: 'unknown'
       }))
     }
-    
+
     return []
   } catch (error) {
     console.error('getNetworkInterfaces error:', error)

@@ -1,26 +1,21 @@
-import axios from 'axios'
-import https from 'https'
 import os from 'os'
 import type {
   BacnetNodeDto,
-  BacnetObjectIdDto,
-  ReadRequestDto,
-  ReadResultDto,
   BacnetPointDto,
   MonitorValueDto,
+  ReadRequestDto,
   WriteRequestDto,
   BacnetDriverConfig
 } from '../dtos/bacnet.dto'
 import { sql } from '../db'
 import { configService } from './config.service'
+import { BacnetClient } from './bacnet/bacnet-client'
 
-// ใช้ Config จาก .env
-const BACnet_API_URL = process.env.BACNET_API_URL || 'https://localhost:7174/api'
-
-const client = axios.create({
-  baseURL: BACnet_API_URL,
-  httpsAgent: new https.Agent({ rejectUnauthorized: false })
-})
+// Multi-Gateway support: configId -> BacnetClient
+const clients = new Map<number, BacnetClient>();
+// Default client (fallback)
+let defaultClient: BacnetClient | null = null;
+let isInitializing = false;
 
 // === Utility for IP Math ===
 function ipToLong(ip: string): number {
@@ -30,27 +25,6 @@ function ipToLong(ip: string): number {
     ipl += parseInt(octet);
   });
   return (ipl >>> 0);
-}
-
-function getNetmaskLen(netmask: string): number {
-  let bits = 0
-  const parts = netmask.split('.')
-  parts.forEach(part => {
-    let n = parseInt(part, 10)
-    while (n > 0) {
-      if ((n & 1) === 1) bits++
-      n >>= 1
-    }
-  })
-  return bits
-}
-
-function isIpInSubnet(ip: string, subnetIp: string, netmask: string): boolean {
-  const ipLong = ipToLong(ip);
-  const subnetLong = ipToLong(subnetIp);
-  const maskLong = ipToLong(netmask);
-
-  return (ipLong & maskLong) === (subnetLong & maskLong);
 }
 
 function getInterfaceInfo(nameOrIp: string) {
@@ -72,135 +46,273 @@ function getInterfaceInfo(nameOrIp: string) {
   return null;
 }
 
+// Initialize ALL clients from DB
+async function initializeClients() {
+  if (isInitializing) return;
+  isInitializing = true;
+
+  try {
+    const networks = await configService.getNetworkConfigs('BACNET');
+    console.log(`[BACnet] Finding ${networks.length} network configurations...`);
+
+    // Close detached clients? Ideally we should diff, but for now let's just create new ones or update
+    // Simple strategy: Clear old map if we want full refresh, or just add new ones.
+    // Let's rely on map.set replacing old keys.
+
+    for (const net of networks) {
+      // Check if client exists
+      if (clients.has(net.id)) continue;
+
+      const config = net.config || {};
+      const rawInterface = config.ip || config.interface || '0.0.0.0';
+      const bacnetPort = config.port || 47808;
+      const apduTimeout = config.apduTimeout || 6000;
+
+      let bacnetInterface = '0.0.0.0';
+      const ifaceInfo = getInterfaceInfo(rawInterface);
+
+      if (ifaceInfo) {
+        bacnetInterface = ifaceInfo.ip;
+        console.log(`[BACnet] Network ${net.name} (ID: ${net.id}) resolved to IP: ${bacnetInterface}`);
+      } else if (rawInterface === '0.0.0.0') {
+        bacnetInterface = '0.0.0.0';
+      } else {
+        console.warn(`[BACnet] Network ${net.name}: Could not resolve interface '${rawInterface}', fallback to 0.0.0.0`);
+        bacnetInterface = '0.0.0.0';
+      }
+
+      console.log(`[BACnet] Creating Client for Network ID ${net.id} on ${bacnetInterface}:${bacnetPort}`);
+      const client = new BacnetClient({
+        port: bacnetPort,
+        interface: bacnetInterface,
+        apduTimeout: apduTimeout,
+        apduSize: 1476
+      });
+
+      clients.set(net.id, client);
+
+      // Set first one as default if not set
+      if (!defaultClient) {
+        defaultClient = client;
+      }
+    }
+
+    // If no networks, maybe create a default legacy one?
+    if (clients.size === 0 && !defaultClient) {
+      console.log('[BACnet] No config found, creating default listener on 0.0.0.0');
+      defaultClient = new BacnetClient({
+        port: 47808,
+        interface: '0.0.0.0',
+        apduTimeout: 6000,
+        apduSize: 1476
+      });
+    }
+
+  } catch (err) {
+    console.error('[BACnet] Failed to initialize clients:', err);
+  } finally {
+    isInitializing = false;
+  }
+}
+
+// Helper to get client by specific network ID
+async function getClientForDeviceWithNetworkId(networkId: number): Promise<BacnetClient | undefined> {
+  if (clients.size === 0) {
+    await initializeClients();
+  }
+  return clients.get(networkId);
+}
+
+// Get Client for a specific Device
+async function getClientForDevice(deviceId?: number): Promise<BacnetClient> {
+  if (clients.size === 0) {
+    await initializeClients();
+  }
+
+  if (!deviceId) return defaultClient!;
+
+  try {
+    const deviceConfig = await configService.getDeviceConfig(deviceId);
+    if (deviceConfig && deviceConfig.network_config_id && clients.has(deviceConfig.network_config_id)) {
+      return clients.get(deviceConfig.network_config_id)!;
+    }
+  } catch (e) { /* ignore */ }
+
+  // Fallback to default
+  return defaultClient!;
+}
+
+// Helper to get ALL clients (for WhoIs broadcast on all networks)
+async function getAllClients(): Promise<BacnetClient[]> {
+  if (clients.size === 0) await initializeClients();
+  const list = Array.from(clients.values());
+  if (list.length === 0 && defaultClient) return [defaultClient];
+  return list;
+}
+
+
+// Helper Map (Reverse) - Supports both with and without OBJECT_ prefix
+const typeNameToId: Record<string, number> = {
+  'ANALOG_INPUT': 0, 'OBJECT_ANALOG_INPUT': 0,
+  'ANALOG_OUTPUT': 1, 'OBJECT_ANALOG_OUTPUT': 1,
+  'ANALOG_VALUE': 2, 'OBJECT_ANALOG_VALUE': 2,
+  'BINARY_INPUT': 3, 'OBJECT_BINARY_INPUT': 3,
+  'BINARY_OUTPUT': 4, 'OBJECT_BINARY_OUTPUT': 4,
+  'BINARY_VALUE': 5, 'OBJECT_BINARY_VALUE': 5,
+  'DEVICE': 8, 'OBJECT_DEVICE': 8,
+  'MULTI_STATE_INPUT': 13, 'OBJECT_MULTI_STATE_INPUT': 13,
+  'MULTI_STATE_OUTPUT': 14, 'OBJECT_MULTI_STATE_OUTPUT': 14,
+  'MULTI_STATE_VALUE': 19, 'OBJECT_MULTI_STATE_VALUE': 19,
+  'CHARACTERSTRING_VALUE': 40, 'OBJECT_CHARACTERSTRING_VALUE': 40,
+  'LARGE_ANALOG_VALUE': 46, 'OBJECT_LARGE_ANALOG_VALUE': 46,
+};
+
+function getTypeId(type: string | number): number {
+  if (typeof type === 'number') return type;
+  const upper = type.toUpperCase();
+  const exactMatch = typeNameToId[upper];
+  if (exactMatch !== undefined) return exactMatch;
+
+  // Try stripping OBJECT_ if not found
+  if (upper.startsWith('OBJECT_')) {
+    const stripped = upper.replace('OBJECT_', '');
+    const strippedMatch = typeNameToId[stripped];
+    if (strippedMatch !== undefined) return strippedMatch;
+  }
+
+  // Fallback: try parsing number
+  const sent = parseInt(type as string);
+  if (!isNaN(sent)) return sent;
+  return 0; // Default or throw?
+}
+
+
 export const bacnetService = {
 
-  // 1. Discovery with Port Filtering
+  // 1. Discovery (Native WhoIs) - Broadcast on ALL interfaces
   async discoverDevices(timeout: number = 3): Promise<{ devices: BacnetNodeDto[], scanningPort: number }> {
     try {
-      console.log(`🔍 [BACNET] Discovery with timeout=${timeout}s...`)
+      console.log(`🔍 [BACNET] Discovery (Native) with timeout=${timeout}s...`)
 
-      // 1. Get Network Config from new config table (or fallback to old driver)
-      let bacnetPort = 47808 // Default 0xBAC0
-      let bacnetInterface = 'eth0'
-      let localDeviceId = 389001
+      const activeClients = await getAllClients();
+      const scanningPort = 47808;
+      const foundDevices: Map<string, BacnetNodeDto> = new Map();
 
-      try {
-        // Try to load from new network_config table
-        const networkConfigs = await configService.getNetworkConfigs('BACNET')
-        
-        if (networkConfigs.length > 0) {
-          const networkConfig = networkConfigs[0]!
-          const config = networkConfig.config || {}
-          
-          // Extract settings from new config structure
-          bacnetPort = config.port || 47808
-          bacnetInterface = config.interface || 'eth0'
-          localDeviceId = config.localDeviceId || 389001
+      return new Promise((resolve) => {
+        // Setup listener for each client
+        activeClients.forEach(client => {
+          const nodeClient = client.getClient();
 
-          console.log(`⚙️ [BACNET] Using Network Config -> Port: ${bacnetPort} (0x${bacnetPort.toString(16).toUpperCase()}), Interface: ${bacnetInterface}, LocalDeviceId: ${localDeviceId}`)
-        } else {
-          // Fallback: Try to load from old driver (for backward compatibility)
-          const drivers = await sql<any[]>`
-              SELECT config FROM devices 
-              WHERE device_type = 'DRIVER' AND (protocol = 'BACNET_IP' OR protocol = 'BACNET')
-              LIMIT 1
-          `
+          const onIAm = (device: any) => {
+            // console.log('DEBUG: IAm device payload:', JSON.stringify(device, null, 2));
 
-          if (drivers.length > 0 && drivers[0].config) {
-            const config = drivers[0].config as BacnetDriverConfig
+            const address = device.address
+              || device.payload?.address
+              || (device.header && device.header.address)
+              || (device.header && device.header.sender && device.header.sender.address);
 
-            // Extract Port
-            if (config.transport?.udpPort) {
-              const portStr = config.transport.udpPort
-              if (typeof portStr === 'string' && portStr.startsWith('0x')) {
-                bacnetPort = parseInt(portStr, 16)
-              } else {
-                bacnetPort = Number(portStr)
-              }
+            const deviceId = device.deviceId || device.payload?.deviceId;
+            const vendorId = device.vendorId || device.payload?.vendorId;
+
+            if (!foundDevices.has(deviceId)) {
+              foundDevices.set(deviceId, {
+                address: address + ":" + scanningPort, // Format IP:Port
+                deviceId: deviceId,
+                // We might not get name immediately in I-Am, might need to read it later or leave blank
+                name: `Device ${deviceId}`,
+                vendorId: vendorId,
+                status: 'online',
+                networkNumber: 0, // Simplified
+                lastSeen: new Date().toISOString()
+              } as any);
             }
+          };
 
-            // Extract Interface
-            if (config.transport?.interface) {
-              bacnetInterface = config.transport.interface
-            }
+          nodeClient.on('iAm', onIAm);
 
-            if (config.localDeviceId) {
-              localDeviceId = config.localDeviceId
-            }
+          // Send WhoIs
+          client.whoIs();
 
-            console.log(`⚙️ [BACNET] Using Legacy Driver Config -> Port: ${bacnetPort} (0x${bacnetPort.toString(16).toUpperCase()}), Interface: ${bacnetInterface}`)
-          } else {
-            console.warn('⚠️ No BACnet Network or Driver config found, using defaults')
-          }
-        }
+          // Cleanup
+          setTimeout(() => {
+            nodeClient.off('iAm', onIAm);
+          }, timeout * 1000);
+        });
 
-      } catch (dbError) {
-        console.error('⚠️ Failed to load config from DB:', dbError)
-      }
-
-      // Resolve Interface Details
-      const ifaceInfo = getInterfaceInfo(bacnetInterface);
-      if (ifaceInfo) {
-        console.log(`   -> Resolved Interface: IP=${ifaceInfo.ip}, Netmask=${ifaceInfo.netmask}`);
-      } else {
-        console.warn(`   -> ⚠️ Could not resolve interface '${bacnetInterface}'. Skipping interface filtering.`);
-      }
-
-      // 2. Discover all devices (Request to C#)
-      const response = await client.get<BacnetNodeDto[]>('/Discovery', {
-        params: { timeout }
-      })
-
-      const allDevices = response.data || []
-
-      // 3. Filter by Port AND Interface (Subnet)
-      const filteredDevices = allDevices.filter(device => {
-        if (!device.address) return false
-
-        const parts = device.address.split(':')
-        if (parts.length !== 2) return false
-
-        const deviceIp = parts[0]!;
-        const devicePort = parseInt(parts[1]!, 10)
-
-        // Filter 1: Port Match
-        if (devicePort !== bacnetPort) return false;
-
-        // Filter 2: Interface (Subnet) Match
-        if (ifaceInfo) {
-          if (!isIpInSubnet(deviceIp, ifaceInfo.ip, ifaceInfo.netmask)) {
-            // Optional: Allow Localhost exceptional case?
-            if (deviceIp !== '127.0.0.1' && deviceIp !== ifaceInfo.ip) {
-              return false;
-            }
-          }
-        }
-
-        return true;
-      })
-
-      console.log(`✅ [BACNET] Found ${filteredDevices.length} devices matching Port ${bacnetPort} & Interface ${bacnetInterface}`)
-
-      return {
-        devices: filteredDevices,
-        scanningPort: bacnetPort
-      }
+        // Wait and Resolve
+        setTimeout(() => {
+          // Flatten results
+          resolve({
+            devices: Array.from(foundDevices.values()),
+            scanningPort: scanningPort
+          });
+        }, timeout * 1000);
+      });
 
     } catch (error) {
       console.error('❌ Discovery Failed:', error)
       return { devices: [], scanningPort: 47808 }
     }
   },
-  // 2. Get Objects (Points)
+
+  // 2. Get Objects (Read ObjectList)
   async getObjects(deviceId: number): Promise<BacnetPointDto[]> {
     try {
-      const response = await client.get<BacnetObjectIdDto[]>(`/ObjectList/${deviceId}`);
+      // For getting objects, we need the device's IP.
+      // [FIX] Use getClientForDevice logic to ensure we are on the right network
+      const deviceConfig = await configService.getDeviceConfig(deviceId);
 
-      return response.data.map(obj => ({
-        instance: obj.instant, // Map แก้คำผิดจาก C# instant -> instance
-        objectType: obj.type,
-        name: `${obj.type}:${obj.instant}`
-      }));
+      const [deviceRecord] = await sql<any[]>`SELECT * FROM devices WHERE device_instance_id = ${deviceId} OR id = ${deviceId} LIMIT 1`;
+
+      if (!deviceRecord) {
+        throw new Error(`Device ${deviceId} not found in DB`);
+      }
+
+      const ip = deviceRecord.ip_address; // Assuming column is ip_address
+      if (!ip) throw new Error(`Device ${deviceId} has no IP address`);
+
+      // Resolve correct client
+      const client = await getClientForDevice(deviceRecord.id);
+
+      // Read Object List (Property ID 76) of Device Object (Type 8, Instance = deviceId)
+      const values = await client.readProperty(ip, 8, deviceRecord.device_instance_id, 76);
+
+      // console.log('DEBUG: getObjects values:', JSON.stringify(values, null, 2));
+
+      const validList = Array.isArray(values) ? values : (values && Array.isArray(values.values) ? values.values : []);
+
+      if (!validList || validList.length === 0) {
+        return [];
+      }
+
+      return validList.map((obj: { value: any }) => {
+        const item = obj.value || obj; // Fallback
+
+        // Convert Type ID to String for compatibility
+        // [FIX] Add OBJECT_ prefix to match valid structure for Frontend
+        const typeMap: Record<number, string> = {
+          0: 'OBJECT_ANALOG_INPUT',
+          1: 'OBJECT_ANALOG_OUTPUT',
+          2: 'OBJECT_ANALOG_VALUE',
+          3: 'OBJECT_BINARY_INPUT',
+          4: 'OBJECT_BINARY_OUTPUT',
+          5: 'OBJECT_BINARY_VALUE',
+          8: 'OBJECT_DEVICE',
+          13: 'OBJECT_MULTI_STATE_INPUT',
+          14: 'OBJECT_MULTI_STATE_OUTPUT',
+          19: 'OBJECT_MULTI_STATE_VALUE',
+          40: 'OBJECT_CHARACTERSTRING_VALUE',
+          46: 'OBJECT_LARGE_ANALOG_VALUE'
+        };
+        const typeStr = typeMap[item.type] || `OBJECT_TYPE_${item.type}`;
+
+        return {
+          instance: item.instance,
+          objectType: typeStr,
+          name: `${typeStr.replace('OBJECT_', '')}:${item.instance}`
+        };
+      });
+
     } catch (error) {
       console.error(`❌ Get Objects Failed for device ${deviceId}:`, error);
       return [];
@@ -210,43 +322,153 @@ export const bacnetService = {
   // 3. Read Multiple (Monitor)
   async readMultiple(points: ReadRequestDto[]): Promise<MonitorValueDto[]> {
     try {
-      const response = await client.post<ReadResultDto[]>(`/ReadWrite/readMultiple`, points);
+      // Group points by deviceId to batch requests per client? 
+      // Current implementation is simple: request one by one. getClientForDevice is async but fast.
 
-      return response.data.map(res => ({
-        deviceId: res.deviceId,
-        objectType: res.objectType,
-        instance: res.instance,
-        propertyId: res.propertyId,
-        value: res.value?.value,
-        status: res.status
-      }));
+      const promises = points.map(async (p) => {
+        try {
+          if (!p.ip) {
+            return null;
+          }
+
+          const client = await getClientForDevice(p.deviceId);
+          const typeId = getTypeId(p.objectType);
+          const val = await client.readProperty(p.ip, typeId, p.instance, p.propertyId || 85);
+
+          let actualValue = val;
+          if (val && val.values && val.values[0]) {
+            actualValue = val.values[0].value;
+          }
+
+          return {
+            deviceId: p.deviceId,
+            objectType: p.objectType, // Return as passed
+            instance: p.instance,
+            propertyId: p.propertyId || 85,
+            value: actualValue,
+            status: 'ok'
+          } as MonitorValueDto;
+
+        } catch (err) {
+          return {
+            deviceId: p.deviceId,
+            objectType: p.objectType,
+            instance: p.instance,
+            propertyId: p.propertyId || 85,
+            value: null,
+            status: 'error'
+          } as MonitorValueDto;
+        }
+      });
+
+      const results = await Promise.all(promises);
+      return results.filter(r => r !== null) as MonitorValueDto[];
+
     } catch (error) {
       console.error('❌ Read Multiple Failed:', error);
       return [];
     }
   },
 
-  // 4. Write Value (รับ DTO ตัวเดียว จบปัญหาสับสน)
+  // 4. Write Value
   async writeProperty(req: WriteRequestDto): Promise<boolean> {
     try {
-      // URL Pattern ตาม C# Swagger
-      const url = `/ReadWrite/devices/${req.deviceId}/objects/${req.objectType}/${req.instance}/properties/${req.propertyId}`
+      const client = await getClientForDevice(req.deviceId);
 
-      console.log(` [BACNET DEBUG] URL: ${url}`)
-      console.log(` [BACNET DEBUG] Body:`, JSON.stringify({ value: req.value }))
-      console.log(` [BACNET DEBUG] Value Type: ${typeof req.value}`)
+      let ip = req.ip;
+      if (!ip) {
+        // Look up device
+        const [dev] = await sql<any[]>`SELECT ip_address FROM devices WHERE id = ${req.deviceId} OR device_instance_id = ${req.deviceId}`;
+        if (dev) ip = dev.ip_address;
+      }
 
-      // ส่ง Body ไปให้ C# (C# จะไปจัดการ Type conversion เองตามที่เราแก้ไว้แล้ว)
-      // [FIX] User supplied example has NO priority and uses raw value.
-      // Schema also shows no priority field.
-      await client.put(url, {
-        value: req.value
-      })
+      if (!ip) throw new Error('Target device IP not found');
 
-      return true
+      const typeId = getTypeId(req.objectType);
+
+      // ---------------------------------------------------------
+      // [FIX] Prepare Value with correct Application Tag
+      // ---------------------------------------------------------
+      const valueList: any[] = [];
+      const priority = req.priority || 16; // Default to 16
+
+      // Case: Relinquish (Null Value)
+      if (req.value === null || req.value === 'null') {
+        valueList.push({
+          type: 0, // BACNET_APPLICATION_TAG_NULL
+          value: null
+        });
+      }
+      else {
+        // Convert value based on Object Type (Analog, Binary, Multi-state)
+        const objectTypeStr = req.objectType.toString().toUpperCase();
+
+        // Case: ANALOG (AO, AV) + INPUT (AI) -> Use REAL (Tag 4)
+        if (objectTypeStr.includes('ANALOG') || typeId === 1 || typeId === 2 || typeId === 0) {
+          valueList.push({
+            type: 4, // BACNET_APPLICATION_TAG_REAL
+            value: parseFloat(req.value as string)
+          });
+        }
+        // Case: BINARY (BO, BV) + INPUT (BI) -> Use ENUMERATED (Tag 9)
+        else if (objectTypeStr.includes('BINARY') || typeId === 4 || typeId === 5 || typeId === 3) {
+          // Convert true/false/'1'/'0' to 0 or 1
+          const numVal = (req.value === true || req.value === 'true' || req.value == 1) ? 1 : 0;
+          valueList.push({
+            type: 9, // BACNET_APPLICATION_TAG_ENUMERATED
+            value: numVal
+          });
+        }
+        // Case: MULTI_STATE (MO, MV) + INPUT (MI) -> Use UNSIGNED_INT (Tag 2)
+        else if (objectTypeStr.includes('MULTI_STATE') || typeId === 14 || typeId === 19 || typeId === 13) {
+          valueList.push({
+            type: 2, // BACNET_APPLICATION_TAG_UNSIGNED_INT
+            value: parseInt(req.value as string)
+          });
+        }
+        // Case: CHARACTERSTRING -> Use CHARACTER_STRING (Tag 7)
+        else if (objectTypeStr.includes('STRING') || typeId === 40) {
+          valueList.push({
+            type: 7, // BACNET_APPLICATION_TAG_CHARACTER_STRING
+            value: String(req.value)
+          });
+        }
+        // Case: LARGE_ANALOG_VALUE -> Use DOUBLE (Tag 5)
+        else if (objectTypeStr.includes('LARGE') || typeId === 46) {
+          valueList.push({
+            type: 5, // BACNET_APPLICATION_TAG_DOUBLE
+            value: parseFloat(req.value as string)
+          });
+        }
+        // Fallback -> Default to Real if unknown
+        else {
+          valueList.push({
+            type: 4,
+            value: req.value
+          });
+        }
+      }
+
+      // [STRATEGY] Unified Write Logic (Strict Priority)
+      // We always send priority (Default 16) because our strategy targets Commandable Objects.
+      // If writing to a non-commandable object (which rejects priority), 
+      // the user must configure the device/simulator correctly (e.g. use AnalogValueCmdObject).
+
+      console.log(`[BACnet] Writing to ${ip} (Instance ${req.instance}) with Priority ${priority}`);
+
+      try {
+        await client.writeProperty(ip, typeId, req.instance, req.propertyId || 85, valueList, priority);
+        console.log(`[BACnet] Write Success.`);
+      } catch (err: any) {
+        console.error(`[BACnet] Write Failed: ${err.message}`);
+        throw err;
+      }
+
+      return true;
+
     } catch (error: any) {
       console.error('❌ Write Failed:', error)
-      throw new Error(`Write Failed: ${error.response?.data?.title || error.message}`);
+      throw new Error(`Write Failed: ${error.message}`);
     }
   }
 }

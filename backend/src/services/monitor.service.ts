@@ -126,11 +126,13 @@ export const monitorService = {
       // -------------------------------------------------------
       else {
         // BACnet มักรองรับ ReadMultipleProperty อยู่แล้ว จึงใช้ logic เดิมได้
+        // [FIX] Must include IP address for native client
         const readRequests: ReadRequestDto[] = points.map(point => ({
+          ip: device.ip_address, // Added IP from device record
           deviceId: device.device_instance_id,
           objectType: point.object_type,
           instance: point.object_instance,
-          propertyId: 'PROP_PRESENT_VALUE'
+          propertyId: 85 // PRESENT_VALUE = 85
         }))
 
         const results = await bacnetService.readMultiple(readRequests)

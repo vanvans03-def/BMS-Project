@@ -78,10 +78,23 @@ export const DeviceConfigurationModal = ({
 
   const loadNetworks = async () => {
     try {
-      const data = protocol === 'BACNET'
-        ? [await configService.getBacnetNetwork()]
-        : await configService.getModbusNetworks()
-      setNetworks(data || [])
+      let data: configService.NetworkConfig[] = []
+
+      if (protocol === 'BACNET') {
+        const res = await configService.getBacnetNetwork()
+        if (res && res.network) {
+          data = [res.network]
+        }
+      } else {
+        const res = await configService.getModbusNetworks()
+        // Check if res is array of wrappers or flat configs
+        // Based on backend service, it returns [{ network, devices }]
+        if (Array.isArray(res)) {
+          data = res.map((item: any) => item.network || item).filter(Boolean)
+        }
+      }
+
+      setNetworks(data)
     } catch (err) {
       console.error('Failed to load networks:', err)
     }

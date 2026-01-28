@@ -8,10 +8,21 @@ export const devicesService = {
   // ... (getAllDevices, discoverDevices, addDevices เดิมคงไว้) ...
   async getAllDevices(locationId?: number) {
     if (locationId) {
-      const rows = await sql`SELECT * FROM devices WHERE location_id = ${locationId} ORDER BY created_at ASC`
+      const rows = await sql`
+        SELECT d.*, dc.network_config_id 
+        FROM devices d
+        LEFT JOIN device_config dc ON d.id = dc.device_id
+        WHERE d.location_id = ${locationId} 
+        ORDER BY d.created_at ASC
+      `
       return [...rows]
     }
-    const rows = await sql`SELECT * FROM devices ORDER BY created_at ASC`
+    const rows = await sql`
+        SELECT d.*, dc.network_config_id 
+        FROM devices d
+        LEFT JOIN device_config dc ON d.id = dc.device_id
+        ORDER BY d.created_at ASC
+    `
     return [...rows]
   },
 
@@ -24,7 +35,7 @@ export const devicesService = {
 
   async addDevices(devicesToAdd: CreateDevicePayload[]) {
     // ... (โค้ดเดิม) ...
-    const results = await sql.begin(async sql => {
+    const results = await sql.begin(async txn => {
       const inserted = []
       for (const dev of devicesToAdd) {
         const instanceId = dev.device_instance_id
@@ -56,10 +67,10 @@ export const devicesService = {
         const locationId = dev.location_id || null
         const isHistoryEnabled = dev.is_history_enabled || false
 
-        const existing = await sql`SELECT id FROM devices WHERE device_instance_id = ${instanceId}`
+        const existing = await (txn as any)`SELECT id FROM devices WHERE device_instance_id = ${instanceId}`
 
         if (existing.length === 0) {
-          const [newDev] = await sql`
+          const [newDev] = await (txn as any)`
             INSERT INTO devices (
                 device_name, device_instance_id, ip_address, network_number,
                 is_active, protocol, unit_id, polling_interval,
@@ -80,6 +91,19 @@ export const devicesService = {
             RETURNING *
           `
           inserted.push(newDev)
+
+          // [FIX] Insert into device_config if network_config_id is provided
+          // Cast dev to any to access network_config_id as it might not be in CreateDevicePayload type definition yet
+          const networkConfigId = (dev as any).network_config_id;
+          if (networkConfigId) {
+            await (txn as any)`
+               INSERT INTO device_config (device_id, network_config_id, config)
+               VALUES (${newDev.id}, ${networkConfigId}, '{}')
+               ON CONFLICT (device_id) DO UPDATE
+               SET network_config_id = EXCLUDED.network_config_id,
+                   updated_at = NOW()
+             `
+          }
         }
       }
       return inserted

@@ -6,7 +6,8 @@ import {
   SearchOutlined, ReloadOutlined, PlusOutlined, DatabaseOutlined,
   WifiOutlined, ArrowLeftOutlined, SyncOutlined, SettingOutlined,
   FileTextOutlined,
-  LineChartOutlined
+  LineChartOutlined,
+  CloudServerOutlined // [NEW]
 } from "@ant-design/icons"
 import AOS from 'aos'
 
@@ -15,6 +16,7 @@ import { DashboardLayout } from '../../components/layout/DashboardLayout'
 
 import { DeviceTable } from "./DeviceTable"
 import { PointTable } from "./PointTable"
+import { DatabaseDropZone } from "./DatabaseDropZone" // [NEW]
 import { DiscoveryModal } from "./DiscoveryModal"
 import { DeviceStatsCards, PointStatsCards } from "../../components/StatsCards"
 import { WriteValueModal } from "../../components/WriteValueModal"
@@ -81,7 +83,11 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
   // [TODO] Point config modal states - will use when implementing point configuration
   // const [pointConfigModalOpen, setPointConfigModalOpen] = useState(false)
   // const [selectedPointForConfig, setSelectedPointForConfig] = useState<number | null>(null)
-  // const [selectedPointForConfigName, setSelectedPointForConfigName] = useState('')
+  // const [selectedPointForConfig, setSelectedPointForConfig] = useState<number | null>(null)
+
+  // [NEW] View Mode for Points (Table vs Manager)
+  const [pointViewMode, setPointViewMode] = useState<'table' | 'manager'>('table')
+  const [stagedPoints, setStagedPoints] = useState<Point[]>([]) // [NEW]
 
   useEffect(() => { AOS.refresh() }, [currentView, selectedGateway, selectedDevice])
 
@@ -116,6 +122,27 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       }
     }
   }, [devices, initialDeviceId, isLoadingDevices])
+
+  // [FIX] Restore selectedGateway if we have a device but no gateway (e.g. deep link / refresh)
+  useEffect(() => {
+    if (selectedDevice && !selectedGateway && devices) {
+      const networkId = (selectedDevice as any).network_config_id
+      if (networkId) {
+        // [OPTIMIZATION] Set a temporary gateway object immediately to ensure 'Back' button works 
+        // without waiting for the async fetch loop.
+        // This prevents the race condition where user clicks Back before fetch completes.
+        setSelectedGateway({ id: networkId, name: 'Loading...', enable: true, config: {} })
+
+        // Then fetch full details to update it
+        authFetch(`/config/networks/${networkId}`)
+          .then(res => res.json())
+          .then(network => {
+            setSelectedGateway(network)
+          })
+          .catch(err => console.error("Failed to restore gateway context", err))
+      }
+    }
+  }, [selectedDevice, selectedGateway, devices])
 
   const { data: points, isLoading: isLoadingPoints, refetch: refetchPoints } = useQuery<Point[]>({
     queryKey: ["points", selectedDevice?.id],
@@ -185,7 +212,13 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       const devicesToAdd = discoveredDevices
         .filter((d) => selectedDiscoveryRows.includes(d.deviceId))
         .map((d) => ({
-          device_name: `Device-${d.deviceId}`, device_instance_id: d.deviceId, ip_address: d.address, network_number: 0, protocol: 'BACNET'
+          device_name: `Device-${d.deviceId}`,
+          device_instance_id: d.deviceId,
+          ip_address: d.address,
+          network_number: 0,
+          protocol: 'BACNET',
+          // [FIX] Link to selected gateway
+          network_config_id: selectedGateway ? selectedGateway.id : null
         }))
       await authFetch('/devices', { method: 'POST', body: JSON.stringify(devicesToAdd) })
       messageApi.success("Added devices"); setIsDiscoveryModalOpen(false); refetchDevices()
@@ -224,12 +257,58 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     try { await authFetch('/points/write', { method: "POST", body: JSON.stringify({ deviceId: selectedDevice.id, pointId: writingPoint.id, value: writingPoint.object_type.includes("ANALOG") ? Number(writeValue) : (writeValue === 'active' || writeValue === 1 ? 1 : 0), priority: writePriority }) }); messageApi.success("Command Sent"); setIsWriteModalOpen(false); setTimeout(refetchPoints, 1000) } catch { messageApi.error("Write Failed") } finally { setIsWriting(false) }
   }
 
+  // [NEW] Handler: Add Points to Database (Hierarchy)
+  const handleAddToDatabase = async (pointIds: React.Key[]) => {
+    if (!selectedDevice) return
+    try {
+      const res = await authFetch('/points/add-to-hierarchy', {
+        method: 'POST',
+        body: JSON.stringify({
+          deviceId: selectedDevice.id,
+          pointIds: pointIds
+        })
+      })
+      const json = await res.json()
+      if (json.success) {
+        messageApi.success(json.message)
+        refetchPoints() // Refresh table to show "Added" status
+      } else {
+        messageApi.error('Failed to add points')
+      }
+    } catch (err) {
+      messageApi.error('Error adding points')
+    }
+  }
+
+  // [NEW] Handler: Toggle History
+  const handleToggleHistory = async (point: Point) => {
+    try {
+      const newValue = !point.is_history_enabled
+      const res = await authFetch('/points/history', {
+        method: 'POST',
+        body: JSON.stringify({
+          pointId: point.id,
+          enabled: newValue
+        })
+      })
+      const json = await res.json()
+      if (json.success) {
+        messageApi.success(`History ${newValue ? 'Enabled' : 'Disabled'}`)
+        refetchPoints()
+      } else {
+        messageApi.error('Failed to update history')
+      }
+    } catch (err) {
+      messageApi.error('Error updating history')
+    }
+  }
+
   const renderDashboard = () => {
     // If no gateway selected, show gateway manager
     if (!selectedGateway) {
       return (
         <Card title="BACnet Gateway Manager" data-aos="fade-up">
-          <BACnetGatewayManager 
+          <BACnetGatewayManager
             onSelectGateway={(gateway) => {
               setSelectedGateway(gateway);
             }}
@@ -251,7 +330,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
             </Col>
             <Col xs={24} md={12} style={{ textAlign: "right" }}>
               <Space>
-                <Button 
+                <Button
                   onClick={() => {
                     setSelectedGateway(null);
                   }}
@@ -269,7 +348,9 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
         <div data-aos="fade-up" data-aos-delay="200">
           <Card>
             <DeviceTable
-              devices={devices || []}
+              devices={(devices || []).filter(d =>
+                !selectedGateway || (d as any).network_config_id === selectedGateway.id
+              )}
               loading={isLoadingDevices}
               defaultPollingInterval={globalPollingInterval}
               onViewDevice={(d) => { setSelectedDevice(d); setCurrentView("detail") }}
@@ -329,6 +410,12 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
             <Col>
               <Space>
                 <Button type="primary" icon={<SyncOutlined spin={isSyncing} />} onClick={handleSync}>Sync Points</Button>
+                <Button
+                  icon={pointViewMode === 'table' ? <CloudServerOutlined /> : <FileTextOutlined />}
+                  onClick={() => setPointViewMode(prev => prev === 'table' ? 'manager' : 'table')}
+                >
+                  {pointViewMode === 'table' ? 'Manage Database' : 'View Table'}
+                </Button>
                 <Button icon={<ReloadOutlined />} onClick={() => refetchPoints()}>Refresh</Button>
               </Space>
             </Col>
@@ -338,6 +425,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
       <div data-aos="fade-up"><PointStatsCards total={points?.length || 0} monitoring={points?.filter(p => p.is_monitor).length || 0} inputs={0} outputs={0} /></div>
       <div data-aos="fade-up" data-aos-delay="200">
         <Card>
+          {/* Always show PointTable, but enable DnD in 'manager' mode */}
           <PointTable
             points={points || []}
             pointValues={pointValues}
@@ -345,11 +433,6 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
             onWritePoint={(p) => { setWritingPoint(p); setWriteValue(pointValues.get(p.id)?.value ?? ""); setIsWriteModalOpen(true) }}
             onViewHistory={(p) => setHistoryPoint(p)}
             onConfigPoint={(p) => {
-              // Point object might not have 'config' if the DTO didn't include it.
-              // We need to ensure 'points' data includes 'config'.
-              // Based on pointsService.getPointsByDeviceId, it selects 'register_type', 'data_type' etc.
-              // It probably doesn't select 'config' yet. I need to update points.service.ts
-              // However, for now let's assume it's there or handle null.
               setConfigModal({
                 open: true,
                 type: 'POINT',
@@ -358,9 +441,43 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
                 title: `Point Config: ${p.point_name}`
               })
             }}
+            onAddToDatabase={handleAddToDatabase}
+            onToggleHistory={handleToggleHistory}
+            // [NEW] DnD Props
+            dragEnabled={pointViewMode === 'manager'}
+            onDragStart={(e, point) => {
+              e.dataTransfer.setData('pointId', String(point.id))
+            }}
           />
         </Card>
       </div>
+
+      {/* [NEW] Fixed Drop Zone at Bottom */}
+      <DatabaseDropZone
+        visible={pointViewMode === 'manager'}
+        stagedPoints={stagedPoints}
+        loading={isLoadingPoints}
+        onDropPoint={(id) => {
+          const point = points?.find(p => p.id === id)
+          if (point && !stagedPoints.find(sp => sp.id === id)) {
+            setStagedPoints(prev => [...prev, point])
+          }
+        }}
+        onRemovePoint={(id) => {
+          setStagedPoints(prev => prev.filter(p => p.id !== id))
+        }}
+        onSave={async () => {
+          if (stagedPoints.length > 0) {
+            await handleAddToDatabase(stagedPoints.map(p => p.id))
+            setStagedPoints([])
+            setPointViewMode('table') // Optional: Auto-close or stay open
+          }
+        }}
+        onCancel={() => {
+          setPointViewMode('table')
+          setStagedPoints([])
+        }}
+      />
     </>
   )
 
@@ -368,7 +485,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
   const menuItems = useMemo(() => {
     if (selectedDevice && currentView !== "loading") {
       return [
-        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to Gateway" },
+        { key: "dashboard", icon: <ArrowLeftOutlined />, label: "Back to Devices" },
         // { type: "divider" },
         // { key: "points", icon: <ApiOutlined />, label: "Points" },
         // History Graph removed from here
@@ -405,12 +522,41 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView }: BACn
     )
   }
 
+  // [FIX] Navigation Logic
+  const handleInternalBack = () => {
+    // 1. Points View -> Device List (Detail -> Dashboard with selectedGateway)
+    if (currentView === 'detail' || currentView === 'points') {
+      setSelectedDevice(null)
+      // Explicitly set view to dashboard. 
+      // We do NOT clear selectedGateway here, so it should render the Device List for that gateway.
+      setCurrentView('dashboard')
+      return
+    }
+
+    // 2. Device List (Gateway View) -> Gateway List
+    if (currentView === 'dashboard' && selectedGateway) {
+      setSelectedGateway(null)
+      return
+    }
+
+    // 3. Fallback to parent onBack (Exit App)
+    onBack && onBack()
+  }
+
   return (
     <DashboardLayout
       title="BACnet Protocol"
       headerIcon={<DatabaseOutlined />}
       themeColor="#1890ff"
-      onBack={['dashboard', 'settings', 'history-graph', 'history-logs', 'logs'].includes(currentView) ? onBack : undefined}
+      // Change: Always show back button if we are deep in hierarchy OR if parent allows it
+      onBack={
+        (currentView === 'detail' || currentView === 'points') ||
+          (currentView === 'dashboard' && selectedGateway) ||
+          // Check if we are in other top-level views that support back
+          ['settings', 'history-graph', 'history-logs', 'logs'].includes(currentView)
+          ? handleInternalBack
+          : undefined
+      }
       currentView={currentView === 'points' ? 'points' : currentView}
       onMenuClick={handleMenuClick}
       menuItems={menuItems as any}

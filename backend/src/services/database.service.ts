@@ -69,14 +69,14 @@ export const databaseService = {
   async clearAllData(protocol: string = 'ALL'): Promise<void> {
     try {
       console.warn(`⚠️ [DATABASE] Clear Data Request. Protocol: ${protocol}`)
-      await sql.begin(async sql => {
+      await sql.begin(async txn => {
         if (protocol === 'BACNET') {
-          await sql`DELETE FROM devices WHERE protocol = 'BACNET'`
+          await (txn as any)`DELETE FROM devices WHERE protocol = 'BACNET'`
         } else if (protocol === 'MODBUS') {
-          await sql`DELETE FROM devices WHERE protocol = 'MODBUS'`
+          await (txn as any)`DELETE FROM devices WHERE protocol = 'MODBUS'`
         } else {
-          await sql`DELETE FROM points`
-          await sql`DELETE FROM devices`
+          await (txn as any)`DELETE FROM points`
+          await (txn as any)`DELETE FROM devices`
         }
       })
     } catch (error) {

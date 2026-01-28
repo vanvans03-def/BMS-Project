@@ -13,6 +13,7 @@ import { modbusRoutes } from './routes/modbus.routes'
 import { locationsRoutes } from './routes/locations.routes' // [NEW]
 import { historyLogRoutes } from './routes/history-logs.routes' // [NEW]
 import { reportsRoutes } from './routes/reports.routes' // [NEW]
+import { configRoutes } from './routes/config.routes' // [NEW]
 import { historyLoggerService } from './services/history-logger.service'
 import { historyCleanupService } from './services/history-cleanup.service'
 import jwt from 'jsonwebtoken'
@@ -55,7 +56,9 @@ const app = new Elysia()
   .use(integrationRoutes) // Register Integration Routes
   .use(locationsRoutes) // [NEW] Locations
   .use(historyLogRoutes) // [NEW] History Logs
+  .use(historyLogRoutes) // [NEW] History Logs
   .use(reportsRoutes) // [NEW] Reports
+  .use(configRoutes) // [NEW] Config
   .listen(3000)
 
 historyLoggerService.start()

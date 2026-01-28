@@ -75,7 +75,7 @@ async function migrate() {
             await sql.begin(async (tx) => {
                 for (const log of tableLogs) {
                     // Check for duplicate PK?
-                    await tx.unsafe(`
+                    await (tx as any).unsafe(`
                         INSERT INTO ${tableName} (timestamp, value, quality_code)
                         VALUES ($1, $2, 'legacy')
                         ON CONFLICT (timestamp) DO NOTHING

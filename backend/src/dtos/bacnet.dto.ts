@@ -13,10 +13,11 @@ export interface BacnetObjectIdDto {
 
 // DTO สำหรับส่งคำสั่งอ่านค่า (Read Multiple Request)
 export interface ReadRequestDto {
+  ip?: string // [NEW] Added for native client
   deviceId: number
   instance: number
-  objectType: string
-  propertyId: string
+  objectType: number
+  propertyId?: number // Optional?
 }
 
 // DTO ผลลัพธ์การอ่านค่า (Read Multiple Result)
@@ -24,28 +25,28 @@ export interface ReadResultDto {
   value: {
     value: any // ค่าที่ซ้อนอยู่ข้างใน
   }
-  status: boolean
+  status: string // 'ok' | 'error'
   deviceId: number
   instance: number
-  objectType: string
-  propertyId: string
+  objectType: number
+  propertyId: number
 }
 
 // DTO สำหรับรับค่าเข้า API ของเราเอง (Frontend -> Backend)
 // (แปลงชื่อให้สื่อความหมายถูกต้อง เช่น instant -> instance)
 export interface BacnetPointDto {
   instance: number
-  objectType: string
+  objectType: string // [REVERTED] Changed back to string to support existing logic
   name: string
 }
 
 export interface MonitorValueDto {
   deviceId: number
-  objectType: string
+  objectType: number
   instance: number
-  propertyId: string
+  propertyId: number
   value: any
-  status: boolean
+  status: string
 }
 
 // DTO สำหรับบันทึกอุปกรณ์ลง Database ของเรา
@@ -64,16 +65,17 @@ export interface CreateDeviceDto {
 
 export interface CreatePointDto {
   device_id: number
-  object_type: string
+  object_type: number
   object_instance: number
   point_name: string
 }
 
 export interface WriteRequestDto {
+  ip?: string // [NEW] Added for native client
   deviceId: number
-  objectType: string
+  objectType: number
   instance: number
-  propertyId: string
+  propertyId: number
   value: any
   priority?: number
 }

@@ -30,7 +30,7 @@ export interface PointConfigRecord {
 
 export const configService = {
   // ============ NETWORK CONFIG ============
-  
+
   async getNetworkConfigs(protocol?: 'BACNET' | 'MODBUS'): Promise<NetworkConfig[]> {
     if (protocol) {
       return await sql<NetworkConfig[]>`
@@ -58,6 +58,31 @@ export const configService = {
     config: any,
     enable: boolean = true
   ): Promise<NetworkConfig> {
+    // [VALIDATION] Check for Duplicates (BACnet only for now)
+    if (protocol === 'BACNET') {
+      const existingName = await sql`
+            SELECT id FROM network_config 
+            WHERE protocol = 'BACNET' AND name = ${name}
+            LIMIT 1
+        `;
+      if (existingName.length > 0) {
+        throw new Error(`Gateway name '${name}' is already taken.`);
+      }
+
+      const localDeviceId = config.localDeviceId;
+      if (localDeviceId) {
+        const existingId = await sql`
+                SELECT id FROM network_config 
+                WHERE protocol = 'BACNET' 
+                AND config->>'localDeviceId' = ${localDeviceId.toString()}
+                LIMIT 1
+            `;
+        if (existingId.length > 0) {
+          throw new Error(`Local Device ID ${localDeviceId} is already used by another gateway.`);
+        }
+      }
+    }
+
     const [result] = await sql<NetworkConfig[]>`
       INSERT INTO network_config (name, protocol, config, enable)
       VALUES (${name}, ${protocol}, ${config}, ${enable})
@@ -70,6 +95,38 @@ export const configService = {
     id: number,
     updates: Partial<Pick<NetworkConfig, 'name' | 'config' | 'enable'>>
   ): Promise<NetworkConfig | null> {
+
+    // [VALIDATION] Check for Duplicates if Name or Config is changing
+    // We need to know the protocol, assume we check duplicates against all or just BACnet?
+    // ideally we should fetch the current config to know protocol, but simpler validation: 
+    // Just check if name exists in ANY record != id.
+
+    if (updates.name) {
+      const existingName = await sql`
+            SELECT id FROM network_config 
+            WHERE name = ${updates.name} AND id != ${id}
+            AND protocol = 'BACNET' -- Assuming we mostly care about BACnet duplicates
+            LIMIT 1
+        `;
+      if (existingName.length > 0) {
+        throw new Error(`Gateway name '${updates.name}' is already taken.`);
+      }
+    }
+
+    if (updates.config && updates.config.localDeviceId) {
+      const localDeviceId = updates.config.localDeviceId;
+      const existingId = await sql`
+            SELECT id FROM network_config 
+            WHERE config->>'localDeviceId' = ${localDeviceId.toString()}
+            AND id != ${id}
+            AND protocol = 'BACNET'
+            LIMIT 1
+        `;
+      if (existingId.length > 0) {
+        throw new Error(`Local Device ID ${localDeviceId} is already used by another gateway.`);
+      }
+    }
+
     const setClause: any = {}
     if (updates.name !== undefined) setClause.name = updates.name
     if (updates.config !== undefined) setClause.config = updates.config
@@ -103,7 +160,8 @@ export const configService = {
 
   async getDevicesByNetwork(networkConfigId: number): Promise<any[]> {
     return await sql<any[]>`
-      SELECT d.* FROM devices d
+      SELECT d.*, dc.config
+      FROM devices d
       INNER JOIN device_config dc ON d.id = dc.device_id
       WHERE dc.network_config_id = ${networkConfigId}
       ORDER BY d.device_name ASC
@@ -164,7 +222,9 @@ export const configService = {
 
   async getPointsByDevice(deviceId: number): Promise<any[]> {
     return await sql<any[]>`
-      SELECT p.* FROM points p
+      SELECT p.*, pc.config
+      FROM points p
+      LEFT JOIN point_config pc ON p.id = pc.point_id
       WHERE p.device_id = ${deviceId}
       ORDER BY p.object_type, p.object_instance
     `
@@ -201,7 +261,7 @@ export const configService = {
   }> {
     const network = await this.getNetworkConfigById(networkConfigId)
     const devices = network ? await this.getDevicesByNetwork(networkConfigId) : []
-    
+
     const points = []
     for (const device of devices) {
       const devicePoints = await this.getPointsByDevice(device.id)
@@ -216,10 +276,38 @@ export const configService = {
     devices: any[]
     points: any[]
   } | null> {
-    const networks = await this.getNetworkConfigs('BACNET')
-    if (networks.length === 0) return null
-    
-    return await this.getFullNetworkInfo(networks[0]!.id)
+    // [FIX] Get the LATEST enabled BACnet network
+    // Previously it fetched all and took [0] (Oldest), so new configs didn't show up.
+    const [latestNetwork] = await sql<NetworkConfig[]>`
+      SELECT * FROM network_config 
+      WHERE protocol = 'BACNET' AND enable = true
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `
+
+    if (!latestNetwork) return null
+
+    return await this.getFullNetworkInfo(latestNetwork.id)
+  },
+
+  async getAllBacnetNetworksInfo(): Promise<Array<{
+    network: NetworkConfig
+    devices: any[]
+    points: any[]
+  }>> {
+    const networks = await sql<NetworkConfig[]>`
+      SELECT * FROM network_config 
+      WHERE protocol = 'BACNET' AND enable = true
+      ORDER BY created_at ASC
+    `
+
+    // Process sequentially to be safe with DB connections
+    const results = [];
+    for (const net of networks) {
+      const info = await this.getFullNetworkInfo(net.id);
+      results.push(info);
+    }
+    return results as any;
   },
 
   async getModbusNetworks(): Promise<Array<{
@@ -228,12 +316,12 @@ export const configService = {
   }>> {
     const networks = await this.getNetworkConfigs('MODBUS')
     const result = []
-    
+
     for (const network of networks) {
       const devices = await this.getDevicesByNetwork(network.id)
       result.push({ network, devices })
     }
-    
+
     return result
   }
 }

@@ -16,36 +16,28 @@ import {
 } from "@ant-design/icons"
 import { useEffect, useRef, useState } from "react"
 import { AnimatedNumber } from "../../components/AnimatedNumber"
+import type { Point, PointValue } from "../../types/common"
 
 const { Text } = Typography
 
 // ... (Interfaces คงเดิม) ...
-interface Point {
-  id: number
-  device_id: number
-  object_type: string
-  object_instance: number
-  point_name: string
-  is_monitor: boolean
-}
 
-interface PointValue {
-  pointId: number
-  value: any
-  status: string
-  timestamp: string
-}
 
 interface PointTableProps {
   points: Point[]
   pointValues: Map<number, PointValue>
   loading: boolean
   onWritePoint: (point: Point) => void
-  onViewHistory: (point: Point) => void // [NEW]
-  onConfigPoint: (point: Point) => void // [NEW]
+  onViewHistory: (point: Point) => void
+  onConfigPoint: (point: Point) => void
+  onAddToDatabase?: (pointIds: React.Key[]) => void
+  onToggleHistory?: (point: Point) => void
+  // [NEW] Drag & Drop Props
+  dragEnabled?: boolean
+  onDragStart?: (e: React.DragEvent, point: Point) => void
 }
 
-export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewHistory, onConfigPoint }: PointTableProps) => {
+export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewHistory, onConfigPoint, onAddToDatabase, onToggleHistory, dragEnabled, onDragStart }: PointTableProps) => {
   const [updatedPoints, setUpdatedPoints] = useState<Set<number>>(new Set())
   const previousValues = useRef<Map<number, any>>(new Map())
 
@@ -97,12 +89,36 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
   }
 
   // ... (Columns คงเดิม) ...
+  // [NEW] Row Selection
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
+
+  const onSelectChange = (newSelectedRowKeys: React.Key[]) => {
+    setSelectedRowKeys(newSelectedRowKeys);
+  };
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: onSelectChange,
+  };
+
+  // ... (Columns) ...
   const columns: ColumnsType<Point> = [
+    // [NEW] Hierarchy Status
+    {
+      title: '',
+      key: 'status',
+      width: 40,
+      render: (_, record: any) => (
+        record.location_id ?
+          <Tooltip title="Added to Database"><CheckCircleOutlined style={{ color: '#52c41a' }} /></Tooltip> :
+          <Tooltip title="Not in Hierarchy"><InfoCircleOutlined style={{ color: '#faad14' }} /></Tooltip>
+      )
+    },
     {
       title: "Property",
       dataIndex: "universal_type",
       key: "type",
-      width: 200,
+      width: 180,
       render: (text, record: any) => {
         // Fallback if universal_type is missing
         const displayType = text || record.object_type?.replace("OBJECT_", "") || "UNKNOWN"
@@ -135,7 +151,7 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
       title: "Instance",
       dataIndex: "object_instance",
       key: "instance",
-      width: 100,
+      width: 80,
       responsive: ["md"],
     },
     {
@@ -195,6 +211,24 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
         )
       },
     },
+    // [NEW] History Toggle Column
+    {
+      title: "History",
+      key: "history",
+      width: 80,
+      align: 'center',
+      render: (_, record: any) => (
+        <Button
+          size="small"
+          type={record.is_history_enabled ? 'primary' : 'default'}
+          icon={<ClockCircleOutlined />}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (onToggleHistory) onToggleHistory(record)
+          }}
+        />
+      )
+    },
     {
       title: "Updated",
       key: "updated",
@@ -235,15 +269,6 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
 
         return (
           <Space>
-            <Tooltip title="View Details">
-              <Button
-                icon={<InfoCircleOutlined />}
-                size="small"
-                style={{ transition: "all 0.2s ease" }}
-                className="hover-lift"
-              />
-            </Tooltip>
-
             {isWritable ? (
               <Tooltip title="Override Value">
                 <Button
@@ -286,30 +311,74 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
   ]
 
   return (
-    <Table
-      columns={columns}
-      dataSource={points}
-      loading={loading}
-      rowKey="id"
-      // [UPDATED] ใช้ Pagination รูปแบบเดียวกับ LogsPage
-      pagination={{
-        current: currentPage,
-        pageSize: pageSize,
-        total: points.length,
-        showSizeChanger: true,
-        showQuickJumper: true,
-        pageSizeOptions: ['10', '20', '50', '100'],
-        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} points`,
-        onChange: (page, newPageSize) => {
-          setCurrentPage(page)
-          if (newPageSize !== pageSize) {
-            setPageSize(newPageSize)
-            setCurrentPage(1)
+    <>
+      {/* [NEW] Bulk Actions Toolbar */}
+      {selectedRowKeys.length > 0 && (
+        <div style={{ marginBottom: 16, padding: '8px 16px', background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Space>
+            <Text strong>{selectedRowKeys.length} points selected</Text>
+          </Space>
+          <Space>
+            <Button
+              type="primary"
+              icon={<DatabaseOutlined />}
+              onClick={() => {
+                if (onAddToDatabase) onAddToDatabase(selectedRowKeys)
+                setSelectedRowKeys([])
+              }}
+            >
+              Add to Database
+            </Button>
+            <Button onClick={() => setSelectedRowKeys([])}>Cancel</Button>
+          </Space>
+        </div>
+      )}
+
+      <Table
+        rowSelection={rowSelection}
+        columns={columns}
+        dataSource={points}
+        loading={loading}
+        rowKey="id"
+        // [UPDATED] ใช้ Pagination รูปแบบเดียวกับ LogsPage
+        pagination={{
+          current: currentPage,
+          pageSize: pageSize,
+          total: points.length,
+          showSizeChanger: true,
+          showQuickJumper: true,
+          pageSizeOptions: ['10', '20', '50', '100'],
+          showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} points`,
+          onChange: (page, newPageSize) => {
+            setCurrentPage(page)
+            if (newPageSize !== pageSize) {
+              setPageSize(newPageSize)
+              setCurrentPage(1)
+            }
           }
-        }
-      }}
-      scroll={{ x: 1000 }}
-      rowClassName={() => "fade-in-row"}
-    />
+        }}
+        scroll={{ x: 1000 }}
+        rowClassName={(record) => {
+          // [NEW] Visual feedback for draggable rows
+          if (dragEnabled && !record.location_id) return "fade-in-row draggable-row"
+          return "fade-in-row"
+        }}
+        // [NEW] Native Drag & Drop Logic
+        onRow={(record) => {
+          if (!dragEnabled || record.location_id) return {} // Only allow dragging if enabled AND point is not yet in DB (optional rule, or allow all)
+          return {
+            draggable: true,
+            onDragStart: (e) => {
+              // Set drag data
+              if (onDragStart) onDragStart(e, record)
+              // Visual effect
+              e.dataTransfer.effectAllowed = "move"
+              // Transparent ghost image could be set here if needed
+            },
+            style: { cursor: 'grab' }
+          }
+        }}
+      />
+    </>
   )
 }

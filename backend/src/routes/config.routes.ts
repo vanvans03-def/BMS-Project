@@ -4,10 +4,14 @@ import { configService } from '../services/config.service'
 export const configRoutes = new Elysia({ prefix: '/config' })
 
   // ============ NETWORK CONFIG ROUTES ============
-  
-  .get('/networks', async ({ query }: { query: { protocol?: string } }) => {
+
+  .get('/networks', async ({ query }) => {
     const protocol = query.protocol as 'BACNET' | 'MODBUS' | undefined
     return await configService.getNetworkConfigs(protocol)
+  }, {
+    query: t.Object({
+      protocol: t.Optional(t.String())
+    })
   })
 
   .get('/networks/:id', async ({ params }) => {
@@ -18,13 +22,23 @@ export const configRoutes = new Elysia({ prefix: '/config' })
     return network
   })
 
-  .post('/networks', async ({ body }) => {
-    return await configService.createNetworkConfig(
-      body.name,
-      body.protocol,
-      body.config,
-      body.enable
-    )
+  .post('/networks', async ({ body, set }) => {
+    try {
+      return await configService.createNetworkConfig(
+        body.name,
+        body.protocol,
+        body.config,
+        body.enable
+      )
+    } catch (e: any) {
+      console.error('Error creating network:', e);
+      if (e.message.includes('already taken') || e.message.includes('already used')) {
+        // [USER REQUEST] Return 200 OK but with status failed
+        set.status = 200;
+        return { status: 'failed', message: e.message };
+      }
+      throw e;
+    }
   }, {
     body: t.Object({
       name: t.String(),
@@ -34,12 +48,23 @@ export const configRoutes = new Elysia({ prefix: '/config' })
     })
   })
 
-  .put('/networks/:id', async ({ params, body }) => {
-    const network = await configService.updateNetworkConfig(Number(params.id), body as any)
-    if (!network) {
-      throw new Error('Network config not found')
+  .put('/networks/:id', async ({ params, body, set }) => {
+    try {
+      const network = await configService.updateNetworkConfig(Number(params.id), body as any)
+      if (!network) {
+        set.status = 404;
+        return { error: 'Network config not found' };
+      }
+      return network
+    } catch (e: any) {
+      console.error('Error updating network:', e);
+      if (e.message.includes('already taken') || e.message.includes('already used')) {
+        // [USER REQUEST] Return 200 OK but with status failed
+        set.status = 200;
+        return { status: 'failed', message: e.message };
+      }
+      throw e;
     }
-    return network
   }, {
     body: t.Object({
       name: t.Optional(t.String()),
@@ -61,19 +86,19 @@ export const configRoutes = new Elysia({ prefix: '/config' })
   })
 
   // ============ BACNET NETWORK ============
-  
+
   .get('/bacnet/network', async () => {
-    return await configService.getBacnetNetworkInfo()
+    return await configService.getAllBacnetNetworksInfo()
   })
 
   // ============ MODBUS NETWORKS ============
-  
+
   .get('/modbus/networks', async () => {
     return await configService.getModbusNetworks()
   })
 
   // ============ DEVICE CONFIG ROUTES ============
-  
+
   .get('/devices/:deviceId', async ({ params }) => {
     const deviceConfig = await configService.getDeviceConfig(Number(params.deviceId))
     if (!deviceConfig) {
@@ -126,7 +151,7 @@ export const configRoutes = new Elysia({ prefix: '/config' })
   })
 
   // ============ POINT CONFIG ROUTES ============
-  
+
   .get('/points/:pointId', async ({ params }) => {
     const pointConfig = await configService.getPointConfig(Number(params.pointId))
     if (!pointConfig) {

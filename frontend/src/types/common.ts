@@ -35,6 +35,10 @@ export interface Point {
   data_format?: string
   display_type?: string
   config?: any
+  // [NEW]
+  location_id?: number | null
+  is_history_enabled?: boolean
+  universal_type?: string
 }
 
 export interface PointValue {
