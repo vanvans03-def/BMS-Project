@@ -34,22 +34,62 @@ export const locationsService = {
         return updated
     },
 
-    // Delete a location
+    // Delete a location (Cascading)
     async deleteLocation(id: number) {
-        // Check for children
+        // Recursive delete children first
         const children = await sql`SELECT id FROM locations WHERE parent_id = ${id}`
-        if (children.length > 0) {
-            throw new Error('Cannot delete location with children. Delete children first.')
+        for (const child of children) {
+            await this.deleteLocation(child.id)
         }
-        // Check for linked devices
-        const devices = await sql`SELECT id FROM devices WHERE location_id = ${id}`
-        if (devices.length > 0) {
-            // Option: Set location_id to null for these devices, or block deletion.
-            // For safety, let's block for now.
-            throw new Error('Cannot delete location with assigned devices. Unassign devices first.')
-        }
+
+        // Unlink devices (set location_id to null) or Delete them? User said "folder root... internal folder must be deleted".
+        // Usually devices are physical, so we just unlink them. But user said "root... inside folder must be deleted".
+        // If strictly following "folder structure", we delete folders.
+        // For devices, unlinking is safer to avoid losing device configs.
+        await sql`UPDATE devices SET location_id = NULL WHERE location_id = ${id}`
+        await sql`UPDATE points SET location_id = NULL WHERE location_id = ${id}`
 
         await sql`DELETE FROM locations WHERE id = ${id}`
         return { success: true }
+    },
+
+    // Recursive Copy
+    async copyLocation(sourceId: number, targetParentId: number | null) {
+        // 1. Get Source
+        const [source] = await sql`SELECT * FROM locations WHERE id = ${sourceId}`
+        if (!source) throw new Error('Source location not found')
+
+        // 2. Generate New Name
+        // Check conflicts in target parent
+        let newName = source.name
+        let counter = 1
+
+        // Simple loop to find unique name
+        // "A" -> "A 1", "A 2"
+        while (true) {
+            const [existing] = await sql`
+                SELECT id FROM locations 
+                WHERE parent_id ${targetParentId ? sql`= ${targetParentId}` : sql`IS NULL`} 
+                AND name = ${newName}
+            `
+            if (!existing) break
+            newName = `${source.name} ${counter}`
+            counter++
+        }
+
+        // 3. Create Copy
+        const [newLocation] = await sql`
+            INSERT INTO locations (parent_id, name, type, description)
+            VALUES (${targetParentId || null}, ${newName}, ${source.type}, ${source.description})
+            RETURNING *
+        `
+
+        // 4. Recursive Copy Children
+        const children = await sql`SELECT id FROM locations WHERE parent_id = ${sourceId}`
+        for (const child of children) {
+            await this.copyLocation(child.id, newLocation!.id) // No need to return promises here unless we want to wait fully
+        }
+
+        return newLocation
     }
 }

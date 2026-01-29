@@ -23,3 +23,11 @@ export const locationsRoutes = new Elysia({ prefix: '/locations' })
             return { success: false, message: error.message }
         }
     })
+    .post('/copy', async ({ body }) => {
+        try {
+            const { sourceId, targetParentId } = body as any
+            return await locationsService.copyLocation(Number(sourceId), targetParentId ? Number(targetParentId) : null)
+        } catch (error: any) {
+            return { success: false, message: error.message }
+        }
+    })

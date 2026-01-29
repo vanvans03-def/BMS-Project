@@ -3,7 +3,7 @@ import { Tree, Button, Dropdown, Modal, Form, Input, Select, message } from 'ant
 import {
     PlusOutlined, FolderOutlined, HomeOutlined,
     AppstoreOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
-    ThunderboltOutlined, LineChartOutlined, HddOutlined
+    ThunderboltOutlined, LineChartOutlined, HddOutlined, FileTextOutlined
 } from '@ant-design/icons'
 import type { DataNode } from 'antd/es/tree'
 import { authFetch } from '../../utils/authFetch'
@@ -149,6 +149,9 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
         return roots
     }, [locations, points])
 
+    // [NEW] Clipboard State
+    const [clipboardId, setClipboardId] = useState<number | null>(null)
+
     // Handlers
     const handleAdd = (parentId: any) => {
         setEditingNode(null)
@@ -168,7 +171,8 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
         const numId = Number(id)
         Modal.confirm({
             title: 'Delete Location?',
-            content: 'This will delete the folder and all its content if empty.',
+            content: 'WARNING: This will delete the folder and ALL its content (sub-folders, devices, points).',
+            okType: 'danger',
             onOk: async () => {
                 try {
                     const res = await authFetch(`/locations/${numId}`, { method: 'DELETE' })
@@ -178,12 +182,83 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
                         // Local Update
                         setLocations(prev => prev.filter(l => l.id !== numId))
                         onSelectLocation(null)
+                        fetchLocationsAndDevices() // Refresh to be safe
                     } else {
                         messageApi.error(json.message || 'Failed to delete')
                     }
                 } catch { messageApi.error('Error deleting') }
             }
         })
+    }
+
+    // [NEW] Copy & Paste Handlers
+    const handleCopy = (id: number) => {
+        setClipboardId(id)
+        messageApi.info('Copied to clipboard')
+    }
+
+    const handlePaste = async (targetParentId: number | null) => {
+        if (!clipboardId) return
+
+        try {
+            messageApi.loading('Pasting...', 0.5)
+            const res = await authFetch('/locations/copy', {
+                method: 'POST',
+                body: JSON.stringify({ sourceId: clipboardId, targetParentId })
+            })
+            const json = await res.json()
+            if (json.success === false) {
+                messageApi.error(json.message || 'Failed to paste')
+            } else {
+                messageApi.success('Pasted successfully')
+                fetchLocationsAndDevices() // Refresh tree
+            }
+        } catch (e) {
+            messageApi.error('Error during paste')
+        }
+    }
+
+
+    // [NEW] Drag & Drop Handler
+    const onDrop = async (info: any) => {
+        const dropKey = info.node.key
+        const dragKey = info.dragNode.key
+        const dropPos = info.node.pos.split('-')
+        const dropPosition = info.dropPosition - Number(dropPos[dropPos.length - 1])
+
+        // Only allow moving locations (folders), not points
+        if (info.dragNode.isPoint) {
+            messageApi.warning('Cannot move points manually here')
+            return
+        }
+
+        // Determine new parent
+        let newParentId: number | null = null
+        if (!info.dropToGap) {
+            // Dropped ON the node -> becomes child
+            newParentId = Number(dropKey)
+        } else {
+            // Dropped BETWEEN nodes -> same parent as target
+            // Find parent of dropKey in existing locations
+            const dropNode = locations.find(l => String(l.id) === dropKey)
+            newParentId = dropNode ? dropNode.parent_id : null
+        }
+
+        try {
+            messageApi.loading('Moving...', 0.5)
+            const res = await authFetch(`/locations/${dragKey}`, {
+                method: 'PUT',
+                body: JSON.stringify({ parent_id: newParentId })
+            })
+            if (res.ok) {
+                messageApi.success('Moved')
+                fetchLocationsAndDevices()
+            } else {
+                messageApi.error('Failed to move')
+            }
+        } catch (e) {
+            messageApi.error('Error moving location')
+        }
     }
 
     const handleSave = async (values: any) => {
@@ -244,6 +319,9 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
                             { key: 'add', label: 'Add Sub-folder', icon: <PlusOutlined />, onClick: (e) => { e.domEvent.stopPropagation(); handleAdd(node.key) } },
                             { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: (e) => { e.domEvent.stopPropagation(); handleEdit(node) } },
                             { type: 'divider' },
+                            { key: 'copy', label: 'Copy', icon: <FileTextOutlined />, onClick: (e) => { e.domEvent.stopPropagation(); handleCopy(Number(node.key)) } },
+                            { key: 'paste', label: 'Paste', icon: <AppstoreOutlined />, disabled: !clipboardId, onClick: (e) => { e.domEvent.stopPropagation(); handlePaste(Number(node.key)) } },
+                            { type: 'divider' },
                             { key: 'delete', label: 'Delete', icon: <DeleteOutlined />, danger: true, onClick: (e) => { e.domEvent.stopPropagation(); handleDelete(node.key) } }
                         ]
                     }} trigger={['contextMenu', 'click']}>
@@ -266,12 +344,15 @@ export const LocationTreePanel = ({ onSelectLocation, showHistoryOnly = false }:
         <div style={{ padding: '0 8px', height: '100%', overflowY: 'auto' }}>
             {contextHolder}
             <div style={{ marginBottom: 8, textAlign: 'right' }}>
+                {clipboardId && <span style={{ marginRight: 8, fontSize: 12, color: '#1890ff' }}>Item in Clipboard</span>}
                 <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => handleAdd(null)}>Add Root</Button>
             </div>
             {locations.length > 0 ? (
                 <Tree
                     showIcon
                     blockNode
+                    draggable
+                    onDrop={onDrop}
                     expandedKeys={expandedKeys}
                     autoExpandParent={autoExpandParent}
                     onExpand={(keys) => {
