@@ -112,32 +112,6 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
     }
   }
 
-  // Header Actions (Restoring Tab-like feel)
-  const headerActions = (
-    <Space size="small">
-      <Tooltip title="View Central Logs">
-        <Button
-          type="text"
-          icon={<FileTextOutlined />}
-          style={{ color: 'white' }}
-          onClick={() => onSelectSystem('LOGS')}
-        >
-          Central Logs
-        </Button>
-      </Tooltip>
-      <Tooltip title="System Hierarchy">
-        <Button
-          type="text"
-          icon={<ClusterOutlined />}
-          style={{ color: 'white' }}
-          onClick={() => onSelectSystem('GLOBAL_SETTINGS')}
-        >
-          Global Settings
-        </Button>
-      </Tooltip>
-    </Space>
-  )
-
   return (
     <DashboardLayout
       title="System Portal"
@@ -146,7 +120,7 @@ export const PortalPage = ({ onSelectSystem }: PortalPageProps) => {
       currentView="dashboard"
       onMenuClick={() => { }}
       showMenu={false}
-      headerActions={headerActions}
+      onNavigate={onSelectSystem}
       contentStyle={{ background: 'transparent', boxShadow: 'none' }} // Darker background
     >
       {contextHolder}
