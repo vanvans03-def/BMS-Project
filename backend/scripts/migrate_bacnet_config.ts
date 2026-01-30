@@ -1,6 +1,6 @@
 
-import { sql } from '../db'
-import { configService } from '../services/config.service'
+import { sql } from '../src/db'
+import { configService } from '../src/services/config.service'
 
 /**
  * Migration Script: Setup Default BACnet Configuration

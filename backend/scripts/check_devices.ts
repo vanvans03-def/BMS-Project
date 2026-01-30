@@ -1,5 +1,5 @@
 
-import { sql } from '../db' // Adjust import if needed
+import { sql } from '../src/db' // Adjust import if needed
 
 async function checkDevices() {
     try {

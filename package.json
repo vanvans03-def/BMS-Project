@@ -1,5 +1,9 @@
 {
-  "dependencies": {
-    "modbus-serial": "^8.0.23"
+  "scripts": {
+    "dev": "concurrently \"cd backend && bun run dev\" \"cd frontend && bun run dev\"",
+    "install:all": "bun install && cd frontend && bun install && cd backend && bun install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

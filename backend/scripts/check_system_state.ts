@@ -1,5 +1,5 @@
 
-import { sql } from '../db'
+import { sql } from '../src/db'
 
 async function checkSystemState() {
     try {

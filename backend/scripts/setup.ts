@@ -1,5 +1,5 @@
 // backend/src/setup.ts
-import { sql } from './db'
+import { sql } from '../src/db'
 
 async function setup() {
   console.log('🚀 Starting Database Setup...')
@@ -81,7 +81,7 @@ async function setup() {
 
     // ตรวจสอบว่ามี admin อยู่แล้วหรือยัง
     const existing = await sql`SELECT id FROM users WHERE username = ${username}`
-    
+
     if (existing.length === 0) {
       await sql`
         INSERT INTO users (username, password, role, email, is_active)
