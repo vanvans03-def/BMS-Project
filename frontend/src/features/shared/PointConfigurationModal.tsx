@@ -19,6 +19,7 @@ import * as configService from '../../services/configService'
 const { Title, Text } = Typography
 const { Option } = Select
 const { TextArea } = Input
+import { UNIT_CATEGORIES } from '../../constants/units'
 
 interface PointConfigurationModalProps {
   open: boolean
@@ -261,7 +262,17 @@ export const PointConfigurationModal = ({
                     label="Unit"
                     tooltip="Measurement unit for this point"
                   >
-                    <Input placeholder="e.g., °C, kW, m/s" />
+                    <Select placeholder="Select or type unit" showSearch allowClear>
+                      {UNIT_CATEGORIES.map(category => (
+                        <Select.OptGroup label={category.category} key={category.category}>
+                          {category.units.map(u => (
+                            <Select.Option value={u.value} key={u.value}>
+                              {u.label} ({u.value})
+                            </Select.Option>
+                          ))}
+                        </Select.OptGroup>
+                      ))}
+                    </Select>
                   </Form.Item>
                 </Col>
                 <Col xs={12}>
@@ -318,8 +329,8 @@ export const PointConfigurationModal = ({
             showIcon
           />
         </Form>
-      </Spin>
-    </Modal>
+      </Spin >
+    </Modal >
   )
 }
 

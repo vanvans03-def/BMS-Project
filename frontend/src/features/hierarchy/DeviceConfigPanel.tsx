@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Table, Switch, Button, Space, Tag, message, Typography, Card, Statistic } from 'antd'
-import { LineChartOutlined, ReloadOutlined, ThunderboltOutlined, FolderOutlined, HddOutlined } from '@ant-design/icons'
+import { LineChartOutlined, ReloadOutlined, ThunderboltOutlined, FolderOutlined, HddOutlined, SettingOutlined } from '@ant-design/icons'
 import { authFetch } from '../../utils/authFetch'
 import { AnimatedNumber } from '../../components/AnimatedNumber'
+import { ConfigurationModal } from '../bacnet/ConfigurationModal'
 import AOS from 'aos'
 
 const { Title, Text } = Typography
@@ -22,6 +23,10 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
     const [activePoint, setActivePoint] = useState<any>(null) // [NEW] Local state for single point
     const [loading, setLoading] = useState(false)
     const [messageApi, contextHolder] = message.useMessage()
+
+    // [NEW] Config Modal State
+    const [configModalOpen, setConfigModalOpen] = useState(false)
+    const [editingPoint, setEditingPoint] = useState<any>(null)
 
     // Real-time Value Map
     const [realtimeValues, setRealtimeValues] = useState<Map<number, any>>(new Map())
@@ -133,14 +138,27 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
             try {
                 let deviceIdToPoll = null
 
-                if (isDeviceView) {
-                    // Try to match Device ID from location
-                    const devRes = await authFetch(`/devices?location_id=${selectedLocation.id}`)
-                    const devs = await devRes.json()
-                    if (devs.length > 0) deviceIdToPoll = devs[0].id
+                if (isDeviceView && selectedLocation?.id) {
+                    // Logic to find device ID from location ID if needed, 
+                    // But in isDeviceView, selectedLocation IS the device folder, 
+                    // however we need the actual device record ID which map to location...
+                    // Actually, looking at code above:
+                    // inFolder = allDevs.filter... setDevices(inFolder)
+                    // Wait, if isDeviceView is true, we fetched points. 
+                    // We need the DEVICE ID to call /monitor/read-device-points.
+                    // The points logic uses /points/by-location/:locId which returns points.
+                    // Those points have device_id.
+                    if (points.length > 0) {
+                        deviceIdToPoll = points[0].device_id
+                    }
+                }
 
-                } else if (isPointView) {
-                    deviceIdToPoll = selectedLocation.device_id
+                // If we are in PointView, we know the point ID, we can find device ID from point?
+                if (isPointView && activePoint) {
+                    deviceIdToPoll = activePoint.device_id
+                } else if (isPointView && selectedLocation) {
+                    // If activePoint is null (direct load?), we might need to find it.
+                    // But usually activePoint is set.
                 }
 
                 if (deviceIdToPoll) {
@@ -149,9 +167,35 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
                     })
                     const json = await res.json()
                     if (json.success && json.values) {
-                        const map = new Map()
-                        json.values.forEach((v: any) => map.set(v.pointId, v.value))
-                        setRealtimeValues(map)
+                        // [UPDATED] Apply COV Logic for Visualization
+                        setRealtimeValues(prevMap => {
+                            const newMap = new Map(prevMap)
+
+                            json.values.forEach((v: any) => {
+                                // Find point config
+                                const point = points.find(p => p.id === v.pointId)
+
+                                let shouldUpdate = true
+
+                                // COV Filter
+                                if (point && point.poll_mode === 'COV') {
+                                    const tolerance = point.cov_tolerance || 0.0
+                                    const oldVal = prevMap.get(v.pointId)
+
+                                    if (oldVal !== undefined && v.value !== null) {
+                                        const diff = Math.abs(Number(v.value) - Number(oldVal))
+                                        if (diff <= tolerance) {
+                                            shouldUpdate = false
+                                        }
+                                    }
+                                }
+
+                                if (shouldUpdate) {
+                                    newMap.set(v.pointId, v.value)
+                                }
+                            })
+                            return newMap
+                        })
                     }
                 }
             } catch (e) { }
@@ -160,7 +204,7 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
         const interval = setInterval(poll, 5000)
         if (isDeviceView || isPointView) poll()
         return () => clearInterval(interval)
-    }, [selectedLocation, isDeviceView, isPointView])
+    }, [selectedLocation, isDeviceView, isPointView, points, activePoint])
 
 
     // Handler: Toggle Point History
@@ -207,8 +251,13 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
                         <Card style={{ flex: 1, minWidth: 200, textAlign: 'center' }}>
                             <Statistic
                                 title="Real-time Value"
-                                value={val !== undefined ? val : '-'}
+                                value={
+                                    val !== undefined
+                                        ? (point.scale ? val * point.scale : val)
+                                        : '-'
+                                }
                                 precision={2}
+                                suffix={point.unit ? <span style={{ fontSize: 16 }}>{point.unit}</span> : null}
                                 valueStyle={{ color: '#3f8600' }}
                                 prefix={<ThunderboltOutlined />}
                             />
@@ -315,8 +364,33 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
             key: 'val',
             render: (_: any, r: any) => {
                 const val = realtimeValues.get(r.id)
-                return val !== undefined ? <Tag color="green">{Number(val).toFixed(2)}</Tag> : <Tag>Wait...</Tag>
+                if (val === undefined) return <Tag>Wait...</Tag>
+
+                let displayVal = Number(val)
+                if (r.scale !== undefined && r.scale !== null) {
+                    displayVal = displayVal * r.scale
+                }
+                const formatted = displayVal.toFixed(2)
+                const suffix = r.unit ? ` ${r.unit}` : ''
+
+                return <Tag color="green">{formatted}{suffix}</Tag>
             }
+        },
+        {
+            title: 'Action',
+            key: 'action',
+            render: (_: any, r: any) => (
+                <Button
+                    size="small"
+                    icon={<SettingOutlined />}
+                    onClick={() => {
+                        setEditingPoint(r)
+                        setConfigModalOpen(true)
+                    }}
+                >
+                    Config
+                </Button>
+            )
         },
         {
             title: 'History',
@@ -353,6 +427,22 @@ export const DeviceConfigPanel = ({ selectedLocation, onNavigate, onSelectNode, 
                 pagination={{ pageSize: 10 }}
                 loading={loading}
                 locale={{ emptyText: 'No points found for this device' }}
+            />
+
+            {/* [NEW] Configuration Modal */}
+            <ConfigurationModal
+                open={configModalOpen}
+                onClose={() => {
+                    setConfigModalOpen(false)
+                    setEditingPoint(null)
+                }}
+                onSave={() => {
+                    fetchData() // Refresh data after save
+                }}
+                type="POINT"
+                targetId={editingPoint?.id || null}
+                initialConfig={editingPoint}
+                title={`Configure Point: ${editingPoint?.point_name}`}
             />
         </div>
     )

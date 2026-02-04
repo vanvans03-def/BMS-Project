@@ -48,19 +48,27 @@ class HistoryLoggerService {
         this.isRunning = true
 
         try {
-            // [UPDATED] Select devices that have AT LEAST ONE point with history enabled
+            // [UPDATED] Smart Scheduling
+            // Calculate effective polling interval: MIN(DeviceDefault, PointSpecificIntervals)
+            // If Point Interval is NULL, it falls back to Device Default.
             const devicesToPoll = await sql`
-                SELECT DISTINCT d.id, d.device_name, d.polling_interval, d.logging_type
+                SELECT 
+                    d.id, d.device_name, 
+                    d.polling_interval AS device_interval,
+                    d.logging_type,
+                    COALESCE(MIN(NULLIF(p.poll_interval, 0)), d.polling_interval) as effective_interval
                 FROM devices d
                 JOIN points p ON d.id = p.device_id
                 WHERE p.is_history_enabled = true
                 AND d.status != 'failed'
+                GROUP BY d.id
             `
 
             const now = Date.now()
 
             for (const device of devicesToPoll) {
-                const interval = device.polling_interval || 60000
+                // Use the fastest interval found or device default, clamped to reasonable min (e.g. 100ms)
+                const interval = Math.max(100, device.effective_interval || 60000)
                 const lastPoll = this.lastPollMap.get(device.id) || 0
 
                 if (now - lastPoll >= interval) {
@@ -77,12 +85,13 @@ class HistoryLoggerService {
 
     private async pollDevice(device: any, timestamp: number) {
         this.lastPollMap.set(device.id, timestamp)
-        const loggingType = device.logging_type || 'COV'
 
         try {
-            // 1. Fetch Point Metadata - Only fetch points that have history enabled
+            // 1. Fetch Point Metadata with Polling Config
             const pointsMeta = await sql`
-                SELECT id, point_name, report_table_name, is_history_enabled 
+                SELECT 
+                    id, point_name, report_table_name, is_history_enabled,
+                    poll_mode, poll_interval, cov_tolerance
                 FROM points 
                 WHERE device_id = ${device.id} AND is_history_enabled = true
             `
@@ -96,8 +105,6 @@ class HistoryLoggerService {
             const result = await monitorService.readDevicePoints(device.id)
 
             if (!result.success || !result.values.length) {
-                // Don't mark as failed immediately if just read error, but maybe log warning
-                // Keep old logic if needed, but here we just return
                 return
             }
 
@@ -107,29 +114,47 @@ class HistoryLoggerService {
             for (const v of validData) {
                 const pointId = v.pointId
                 const meta = pointMap.get(pointId)
-
-                // [CRITICAL] Skip if this specific point is not enabled for history
-                if (!meta || !meta.is_history_enabled) continue
+                if (!meta) continue
 
                 const newValue = Number(v.value)
+                // Cache key includes pointId
                 const lastCache = this.pointCache.get(pointId)
+
                 let shouldLog = false
+
+                // --- LOGIC: PER-POINT POLLING ---
+                const mode = meta.poll_mode || 'POLL' // Default to POLL if not set (Migration default was POLL)
 
                 if (!lastCache) {
                     shouldLog = true
-                } else if (loggingType === 'INTERVAL') {
-                    shouldLog = true
                 } else {
-                    const timeDiff = timestamp - lastCache.timestamp
-                    if (timeDiff >= this.MAX_INTERVAL_MS) {
-                        shouldLog = true
-                    } else {
-                        const diff = Math.abs(newValue - lastCache.value)
-                        const percentChange = lastCache.value === 0
-                            ? (newValue === 0 ? 0 : 100)
-                            : (diff / Math.abs(lastCache.value)) * 100
+                    // 1. POLLING MODE
+                    if (mode === 'POLL') {
+                        // Use Point Interval OR Device Interval (fallback)
+                        const interval = meta.poll_interval || device.device_interval || 60000
+                        const timeDiff = timestamp - lastCache.timestamp
 
-                        if (percentChange >= this.DEADBAND_PERCENT) {
+                        if (timeDiff >= interval) {
+                            shouldLog = true
+                        }
+                    }
+                    // 2. COV MODE
+                    else if (mode === 'COV') {
+                        // Tolerance: Use point config OR default 0.5 (or 0 for strict change)
+                        // If cov_tolerance is null, we can default to 0.0 or 0.5. Let's use 0.0 (any change) if not specified? 
+                        // Migration comment said: "Null = No tolerance / Exact match" -> implies 0.0
+                        const tolerance = meta.cov_tolerance ?? 0.0
+
+                        const diff = Math.abs(newValue - lastCache.value)
+
+                        if (diff > tolerance) { // Strictly greater? or >=? Let's say > to avoid noise on float equality
+                            shouldLog = true
+                        }
+
+                        // Heartbeat: Also log if too much time passed (e.g. 1 hour or specific interval)
+                        // Use Point Interval as Heartbeat if set, else 1 Hour
+                        const heartbeat = meta.poll_interval || this.MAX_INTERVAL_MS
+                        if ((timestamp - lastCache.timestamp) >= heartbeat) {
                             shouldLog = true
                         }
                     }
@@ -156,7 +181,8 @@ class HistoryLoggerService {
             }
 
             if (logCount > 0) {
-                console.log(`✅ [History] Logged ${logCount} points for ${device.device_name}`)
+                // Low verbosity log
+                // console.log(`✅ [History] Logged ${logCount} points for ${device.device_name}`)
             }
 
         } catch (err) {

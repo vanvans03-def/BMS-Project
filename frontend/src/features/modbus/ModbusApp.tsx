@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useMemo } from 'react'
-import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Tabs, Tag, Radio } from 'antd'
+import { Button, Typography, Space, Card, Modal, Form, Input, InputNumber, Select, message, Row, Col, Tabs, Tag, Radio, Slider } from 'antd'
 import {
   ReloadOutlined, PlusOutlined, DatabaseOutlined,
   HddOutlined, ThunderboltOutlined, ArrowLeftOutlined,
@@ -12,6 +12,9 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import AOS from 'aos'
+
+import { LogScaleSlider } from '../../components/LogScaleSlider'
+import { UNIT_CATEGORIES } from '../../constants/units'
 
 import { authFetch } from '../../utils/authFetch'
 import { DashboardLayout } from '../../components/layout/DashboardLayout'
@@ -330,7 +333,9 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView, onNavi
           address: values.address,
           dataType,
           dataFormat: values.dataFormat,
-          dataLength: values.dataLength
+          dataLength: values.dataLength,
+          scale: values.scale,
+          unit: values.unit
         })
       })
       const data = await res.json()
@@ -871,17 +876,39 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView, onNavi
             </Form.Item>
           </Row>
 
-          <Form.Item name="dataFormat" label="Display Format" initialValue="RAW">
-            <Select>
-              <Select.Option value="RAW">Raw</Select.Option>
-              <Select.Option value="TEMP_C_100">Temp /100 (°C)</Select.Option>
-              <Select.Option value="TEMP_C_10">Temp /10 (°C)</Select.Option>
-              <Select.Option value="HUMIDITY_10">Humidity /10 (%RH)</Select.Option>
-              <Select.Option value="SCALE_0.1">Scale /10 (Generic)</Select.Option>
-              <Select.Option value="SCALE_0.01">Scale /100 (Generic)</Select.Option>
-              <Select.Option value="VOLT_V">Voltage (V)</Select.Option>
+          {/* Scale and Unit */}
+          {/* Unit - Full Width */}
+          <Form.Item name="unit" label="Unit">
+            <Select showSearch allowClear placeholder="Select Format" optionFilterProp="children">
+              {UNIT_CATEGORIES.map(category => (
+                <Select.OptGroup label={category.category} key={category.category}>
+                  {category.units.map(u => (
+                    <Select.Option value={u.value} key={u.value}>
+                      {u.label} ({u.value})
+                    </Select.Option>
+                  ))}
+                </Select.OptGroup>
+              ))}
             </Select>
           </Form.Item>
+
+          {/* Scale Factor - Full Width */}
+          <Form.Item label="Scale Factor" style={{ marginBottom: 0 }}>
+            <Row gutter={8}>
+              <Col span={20}>
+                <Form.Item name="scale" initialValue={1.0} noStyle>
+                  <LogScaleSlider />
+                </Form.Item>
+              </Col>
+              <Col span={4}>
+                <Form.Item name="scale" initialValue={1.0} noStyle>
+                  <InputNumber min={0.0001} step={0.001} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Form.Item>
+
+
           <Button type="primary" htmlType="submit" block>Add Point</Button>
         </Form>
       </Modal>
@@ -905,6 +932,6 @@ export default function ModbusApp({ onBack, initialDeviceId, initialView, onNavi
           />
         )}
       </Modal>
-    </DashboardLayout>
+    </DashboardLayout >
   )
 }

@@ -64,3 +64,30 @@ export const pointsRoutes = new Elysia({ prefix: '/points' })
       enabled: t.Boolean()
     })
   })
+
+  .put('/:id', async ({ params, body }) => {
+    // Frontend ConfigurationModal sends everything flattened or wrapped. 
+    // Usually Config Modal sends { config: { poll_mode, scale, ... } } or flattened?
+    // Let's assume ConfigurationModal sends { config: { ...fields } } because of how it wraps values.
+    // BUT we need to check ConfigurationModal handleSave.
+
+    // If body has { config: { poll_mode, ... } }
+    const { config } = body
+
+    // Extract special columns that are now first-class citizens in DB
+    const { scale, unit, poll_mode, poll_interval, cov_tolerance, ...otherConfig } = config || {}
+
+    await pointsService.updatePoint(Number(params.id), {
+      scale,
+      unit,
+      poll_mode,
+      poll_interval,
+      cov_tolerance,
+      config: otherConfig // Store remaining items in JSON config
+    })
+    return { success: true }
+  }, {
+    body: t.Object({
+      config: t.Optional(t.Any())
+    })
+  })

@@ -239,7 +239,26 @@ export const configService = {
           updated_at = NOW()
       RETURNING *
     `
+
+    // [SYNC] Update scale and unit in points table if present in config
+    const scale = config.scale !== undefined ? parseFloat(config.scale) : null;
+    const unit = config.unit;
+    if (scale !== null || unit !== undefined) {
+      const updates: any = {};
+      if (scale !== null && !isNaN(scale)) updates.scale = scale;
+      if (unit !== undefined) updates.unit = unit;
+
+      if (Object.keys(updates).length > 0) {
+        await sql`
+          UPDATE points 
+          SET ${sql(updates)}
+          WHERE id = ${pointId}
+        `
+      }
+    }
+
     return result as PointConfigRecord
+
   },
 
   async updatePointConfig(pointId: number, config: any): Promise<PointConfigRecord | null> {
@@ -249,7 +268,27 @@ export const configService = {
       WHERE point_id = ${pointId}
       RETURNING *
     `
+
+    // [SYNC] Update scale and unit in points table if present in config
+    const scale = config.scale !== undefined ? parseFloat(config.scale) : null;
+    const unit = config.unit;
+    // We only update if they are defined in the config object
+    if (scale !== null || unit !== undefined) {
+      const updates: any = {};
+      if (scale !== null && !isNaN(scale)) updates.scale = scale;
+      if (unit !== undefined) updates.unit = unit;
+
+      if (Object.keys(updates).length > 0) {
+        await sql`
+          UPDATE points 
+          SET ${sql(updates)}
+          WHERE id = ${pointId}
+        `
+      }
+    }
+
     return (result as PointConfigRecord) || null
+
   },
 
   // ============ BATCH OPERATIONS ============

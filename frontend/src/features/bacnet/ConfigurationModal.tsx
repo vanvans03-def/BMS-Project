@@ -1,6 +1,8 @@
-import { Modal, Form, Input, InputNumber, Select, Button, Space, Typography, Row, Col, message } from 'antd'
+import { Modal, Form, Input, InputNumber, Select, Button, Space, Typography, Row, Col, message, Slider } from 'antd'
 import { useEffect, useState } from 'react'
 import { authFetch } from '../../utils/authFetch'
+import { UNIT_CATEGORIES } from '../../constants/units'
+import { LogScaleSlider } from '../../components/LogScaleSlider'
 
 const { Title } = Typography
 const { Option } = Select
@@ -277,42 +279,70 @@ export const ConfigurationModal = ({ open, onClose, onSave, type, targetId, init
 
     const renderPointForm = () => (
         <>
-            <Form.Item
-                name="type"
-                label="Universal Data Type"
-                rules={[{ required: true, message: 'Please select a data type' }]}
-            >
-                <Select placeholder="Select Data Type">
-                    <Option value="BOOLEAN_R">BOOLEAN (R) - Read Status (0/1)</Option>
-                    <Option value="BOOLEAN_W">BOOLEAN (W) - Command Status (0/1)</Option>
-                    <Option value="NUMERIC_R">NUMERIC (R) - Read Value (Analog/Discrete)</Option>
-                    <Option value="NUMERIC_W">NUMERIC (W) - Setpoint/Command</Option>
-                    <Option value="STRING">STRING - Text Information</Option>
-                </Select>
-            </Form.Item>
+            {/* [REMOVED] Universal Data Type & Poll Frequency 
+                User requested to simplify this modal for Hierarchy config.
+                Type should not be editable here.
+            */}
 
-            <Form.Item name="pollFrequency" label="Poll Frequency">
+            {/* Polling Strategy */}
+            <Title level={5} style={{ marginTop: 0 }}>Polling Strategy</Title>
+            <Form.Item name="poll_mode" label="Handling Mode" initialValue="POLL">
                 <Select>
-                    <Option value="Fast">Fast</Option>
-                    <Option value="Normal">Normal</Option>
-                    <Option value="Slow">Slow</Option>
+                    <Option value="POLL">Polling</Option>
+                    <Option value="COV">COV (Change of Value)</Option>
+                </Select>
+            </Form.Item>
+            <Form.Item
+                noStyle
+                shouldUpdate={(prev, curr) => prev.poll_mode !== curr.poll_mode}
+            >
+                {({ getFieldValue }) => {
+                    const mode = getFieldValue('poll_mode') || 'POLL'
+                    return mode === 'POLL' ? (
+                        <Form.Item name="poll_interval" label="Poll Interval (ms)" extra="Leave empty to use Device Default">
+                            <InputNumber step={100} min={100} style={{ width: '100%' }} placeholder="Device Default" />
+                        </Form.Item>
+                    ) : (
+                        <Form.Item name="cov_tolerance" label="COV Tolerance" initialValue={0.0}>
+                            <InputNumber step={0.1} min={0} style={{ width: '100%' }} />
+                        </Form.Item>
+                    )
+                }}
+            </Form.Item>
+
+            {/* Format (Unit) & Scale */}
+            {/* Unit - Full Width */}
+            <Form.Item name="unit" label="Unit">
+                <Select showSearch allowClear placeholder="Select Unit" optionFilterProp="children">
+                    {UNIT_CATEGORIES.map(category => (
+                        <Select.OptGroup label={category.category} key={category.category}>
+                            {category.units.map(u => (
+                                <Select.Option value={u.value} key={u.value}>
+                                    {u.label} ({u.value})
+                                </Select.Option>
+                            ))}
+                        </Select.OptGroup>
+                    ))}
                 </Select>
             </Form.Item>
 
-            <div style={{ marginTop: 16, marginBottom: 16, padding: 16, background: '#fafafa', borderRadius: 8, border: '1px solid #f0f0f0' }}>
-                <Row gutter={16}>
-                    <Col span={12}>
-                        <Form.Item name={['bacnet', 'objectType']} label="Object Type">
-                            <Input disabled variant="borderless" style={{ color: '#595959', cursor: 'default' }} />
+            {/* Scale Factor - Full Width */}
+            <Form.Item label="Scale Factor" style={{ marginBottom: 0 }}>
+                <Row gutter={8}>
+                    <Col span={20}>
+                        <Form.Item name="scale" initialValue={1.0} noStyle>
+                            <LogScaleSlider />
                         </Form.Item>
                     </Col>
-                    <Col span={12}>
-                        <Form.Item name={['bacnet', 'instanceNumber']} label="Instance Number">
-                            <InputNumber disabled bordered={false} style={{ width: '100%', color: '#595959', cursor: 'default' }} />
+                    <Col span={4}>
+                        <Form.Item name="scale" initialValue={1.0} noStyle>
+                            <InputNumber min={0.0001} step={0.001} style={{ width: '100%' }} />
                         </Form.Item>
                     </Col>
                 </Row>
-            </div>
+            </Form.Item>
+
+            {/* [REMOVED] Object Type / Instance Info - Simplification */}
         </>
     )
 

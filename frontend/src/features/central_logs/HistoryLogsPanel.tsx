@@ -17,6 +17,8 @@ interface HistoryTable {
     table_name: string;
     device_name: string;
     point_name: string;
+    scale?: number;
+    unit?: string;
 }
 
 const HistoryLogsPanel: React.FC = () => {
@@ -105,7 +107,19 @@ const HistoryLogsPanel: React.FC = () => {
             title: 'Value',
             dataIndex: 'value',
             key: 'value',
-            render: (val: number) => <Tag color="blue" style={{ fontSize: 14 }}>{val}</Tag>
+            render: (val: number) => {
+                const info = tables.find(t => t.table_name === selectedTableName);
+                let displayVal = val;
+                if (info?.scale !== undefined && info?.scale !== null) {
+                    displayVal = val * info.scale;
+                }
+
+                return (
+                    <Tag color="blue" style={{ fontSize: 14 }}>
+                        {displayVal} {info?.unit || ''}
+                    </Tag>
+                )
+            }
         },
         {
             title: 'Quality',

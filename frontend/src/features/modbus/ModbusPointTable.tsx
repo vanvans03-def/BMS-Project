@@ -237,6 +237,15 @@ export const ModbusPointTable = ({ points, pointValues, loading, onWrite, onDele
                 break
 
               default:
+                // [NEW] Check for custom scale / unit
+                if (record.scale !== undefined && record.scale !== null) {
+                  displayVal = displayVal * record.scale;
+                  // Adjust decimals based on scale if needed, or default to 2
+                  if (record.scale < 1) decimals = 2;
+                }
+                if (record.unit) {
+                  suffix = ` ${record.unit}`;
+                }
                 break
             }
 

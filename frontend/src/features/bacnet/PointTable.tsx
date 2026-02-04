@@ -215,7 +215,21 @@ export const PointTable = ({ points, pointValues, loading, onWritePoint, onViewH
                 <AnimatedNumber value={pointValue.value} style={{ color, fontSize: 15 }} />
               ) : (
                 <Text strong style={{ color, fontSize: 15 }}>
-                  {displayValue}
+                  {(() => {
+                    let displayVal = pointValue.value
+                    let suffix = ''
+                    if (record.scale !== undefined && record.scale !== null && typeof displayVal === 'number') {
+                      displayVal = displayVal * record.scale
+                    }
+                    if (record.unit) suffix = ` ${record.unit}`
+
+                    if (typeof displayVal === 'number') {
+                      // Adjust decimals? Default 2 for floats
+                      // If user wants specific precision we could add that to Point config too, but for now fixed.
+                      return <><AnimatedNumber value={displayVal} />{suffix}</>
+                    }
+                    return `${displayVal}${suffix}`
+                  })()}
                 </Text>
               )}
             </Space>

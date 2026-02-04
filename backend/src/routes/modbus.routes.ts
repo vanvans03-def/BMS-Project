@@ -80,10 +80,12 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
       const [newPoint] = await sql`
         INSERT INTO points (
           device_id, object_type, object_instance, point_name, 
-          register_type, data_type, data_format, is_monitor, display_type, data_length
+          register_type, data_type, data_format, is_monitor, display_type, data_length,
+          scale, unit
         ) VALUES (
           ${deviceId}, 'MODBUS_POINT', ${address}, ${pointName},
-          ${registerType}, ${dataType || 'INT16'}, ${dataFormat || 'RAW'}, true, ${displayType}, ${dataLength || 1}
+          ${registerType}, ${dataType || 'INT16'}, ${dataFormat || 'RAW'}, true, ${displayType}, ${dataLength || 1},
+          ${body.scale || 1.0}, ${body.unit || null}
         )
         RETURNING *
       `
@@ -114,7 +116,9 @@ export const modbusRoutes = new Elysia({ prefix: '/modbus' })
       address: t.Number(),
       dataType: t.Optional(t.String()),
       dataFormat: t.Optional(t.String()),
-      dataLength: t.Optional(t.Number())
+      dataLength: t.Optional(t.Number()),
+      scale: t.Optional(t.Number()),
+      unit: t.Optional(t.String())
     })
   })
 

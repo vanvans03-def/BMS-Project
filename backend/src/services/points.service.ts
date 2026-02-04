@@ -24,7 +24,12 @@ class PointsService {
         data_type,
         data_format,
         config,
-        universal_type
+        universal_type,
+        scale,
+        unit,
+        poll_mode,
+        poll_interval,
+        cov_tolerance
       FROM points 
       WHERE device_id = ${deviceId} 
       ORDER BY object_type, object_instance
@@ -191,6 +196,29 @@ class PointsService {
   async togglePointHistory(pointId: number, enabled: boolean) {
     await sql`UPDATE points SET is_history_enabled = ${enabled} WHERE id = ${pointId}`
     return { success: true, is_history_enabled: enabled }
+  }
+
+  async updatePoint(id: number, data: any) {
+    const { scale, unit, config, poll_mode, poll_interval, cov_tolerance } = data
+
+    // Build dynamic update query
+    const updates: any = {}
+    if (scale !== undefined) updates.scale = scale
+    if (unit !== undefined) updates.unit = unit
+    if (poll_mode !== undefined) updates.poll_mode = poll_mode
+    if (poll_interval !== undefined) updates.poll_interval = poll_interval
+    if (cov_tolerance !== undefined) updates.cov_tolerance = cov_tolerance
+
+    if (config !== undefined) updates.config = config
+
+    if (Object.keys(updates).length === 0) return { success: true, message: 'No changes' }
+
+    await sql`
+      UPDATE points 
+      SET ${sql(updates)}
+      WHERE id = ${id}
+    `
+    return { success: true }
   }
 
   /**

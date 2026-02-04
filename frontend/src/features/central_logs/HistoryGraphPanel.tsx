@@ -23,6 +23,8 @@ interface HistoryTable {
     table_name: string;
     device_name: string;
     point_name: string;
+    scale?: number;
+    unit?: string;
 }
 
 interface GraphDataPoint {
@@ -142,7 +144,15 @@ const HistoryGraphPanel: React.FC<HistoryGraphPanelProps> = ({ initialSelection,
                             originalTimestamp: new Date(point.timestamp).getTime()
                         };
                     }
-                    mergedData[timeKey][tableName] = point.value;
+
+                    // Apply scale if available
+                    const tableInfo = tables.find(t => t.table_name === tableName);
+                    let val = point.value;
+                    if (tableInfo?.scale !== undefined && tableInfo?.scale !== null && typeof val === 'number') {
+                        val = val * tableInfo.scale;
+                    }
+
+                    mergedData[timeKey][tableName] = val;
                 });
             });
 
@@ -165,7 +175,7 @@ const HistoryGraphPanel: React.FC<HistoryGraphPanelProps> = ({ initialSelection,
 
     const getPointLabel = (tableName: string) => {
         const table = tables.find(t => t.table_name === tableName);
-        return table ? `${table.device_name} - ${table.point_name} ` : tableName;
+        return table ? `${table.device_name} - ${table.point_name}${table.unit ? ` (${table.unit})` : ''}` : tableName;
     };
 
     // Zoom handlers

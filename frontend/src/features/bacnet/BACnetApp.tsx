@@ -430,7 +430,7 @@ export default function BACnetApp({ onBack, initialDeviceId, initialView, onNavi
                 open: true,
                 type: 'POINT',
                 targetId: p.id,
-                initialConfig: (p as any).config || {},
+                initialConfig: { ...((p as any).config || {}), scale: p.scale, unit: p.unit },
                 title: `Point Config: ${p.point_name}`
               })
             }}

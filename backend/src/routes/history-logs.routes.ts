@@ -89,7 +89,9 @@ export const historyLogRoutes = new Elysia({ prefix: '/api/history-logs' })
             SELECT 
                 p.report_table_name as table_name,
                 d.device_name,
-                p.point_name
+                p.point_name,
+                p.scale,
+                p.unit
             FROM points p
             JOIN devices d ON p.device_id = d.id
             WHERE p.report_table_name IS NOT NULL
@@ -99,7 +101,9 @@ export const historyLogRoutes = new Elysia({ prefix: '/api/history-logs' })
         return tables.map(row => ({
             table_name: row.table_name,
             device_name: row.device_name,
-            point_name: row.point_name
+            point_name: row.point_name,
+            scale: row.scale,
+            unit: row.unit
         }))
     })
     .get('/table/:tableName', async ({ params, query }) => {
@@ -117,16 +121,16 @@ export const historyLogRoutes = new Elysia({ prefix: '/api/history-logs' })
         }
 
         const conditions = []
-        if (startDate) conditions.push(sql`timestamp >= ${startDate}`)
-        if (endDate) conditions.push(sql`timestamp <= ${endDate}`)
+        if (startDate) conditions.push(sql`timestamp >= ${startDate} `)
+        if (endDate) conditions.push(sql`timestamp <= ${endDate} `)
 
         const whereClause = conditions.length
-            ? sql`WHERE ${conditions.reduce((acc, curr, i) => i === 0 ? curr : sql`${acc} AND ${curr}`)}`
+            ? sql`WHERE ${conditions.reduce((acc, curr, i) => i === 0 ? curr : sql`${acc} AND ${curr}`)} `
             : sql``
 
         // Get total count
         // Using sql.unsafe because table name is dynamic
-        const countQuery = sql`SELECT COUNT(*) as total FROM ${sql(tableName)} ${whereClause}`
+        const countQuery = sql`SELECT COUNT(*) as total FROM ${sql(tableName)} ${whereClause} `
         const countResult = await countQuery
         const total = Number(countResult[0]?.total || 0)
 
@@ -170,7 +174,7 @@ export const historyLogRoutes = new Elysia({ prefix: '/api/history-logs' })
         // Validate table names
         for (const tableName of tables) {
             if (!/^table_[a-z0-9_]+$/.test(tableName)) {
-                throw new Error(`Invalid table name: ${tableName}`)
+                throw new Error(`Invalid table name: ${tableName} `)
             }
         }
 

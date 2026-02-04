@@ -11,6 +11,15 @@ export interface Point {
   // New Report Fields
   point_mark?: string
   report_table_name?: string
+
+  // Scale & Unit
+  scale?: number
+  unit?: string
+
+  // Polling Config (Per Point)
+  poll_mode?: 'POLL' | 'COV'
+  poll_interval?: number
+  cov_tolerance?: number
 }
 
 export interface Device {

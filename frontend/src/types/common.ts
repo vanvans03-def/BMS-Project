@@ -39,6 +39,8 @@ export interface Point {
   location_id?: number | null
   is_history_enabled?: boolean
   universal_type?: string
+  scale?: number
+  unit?: string
 }
 
 export interface PointValue {
